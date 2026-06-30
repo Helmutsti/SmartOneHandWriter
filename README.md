@@ -155,6 +155,46 @@ copy data\wordlist_it.txt .
 
 ---
 
+## 1-bis. Demo su macOS (Swift)
+
+Una **demo** che fa girare il motore dentro la sua finestra, con un editor
+interno. Serve a **vedere subito OneHand al lavoro** su Mac: **non chiede alcun
+permesso** (intercetta i tasti solo nella propria finestra; scrivere nelle *altre*
+app — col permesso Accessibilità — sarà un passo successivo).
+
+Ti bastano i **Command Line Tools** di Apple (niente Xcode): forniscono `swiftc`,
+`clang` e l'SDK con AppKit. Se non li hai, installali con:
+
+```bash
+xcode-select --install
+```
+
+Poi, dalla **radice del repo**, compila in due passi:
+
+```bash
+# 1) il motore C++ (con la C ABI) → file oggetto
+clang++ -std=c++17 -Icore/include -Icore/src -c \
+  core/src/engine.cpp core/src/dictionary.cpp core/src/config.cpp \
+  core/src/utf8.cpp core/src/onehand_c.cpp
+
+# 2) l'app Swift: linka gli oggetti + Cocoa, importando l'header C
+swiftc platform/macos/main.swift *.o \
+  -import-objc-header core/include/onehand/onehand_c.h \
+  -framework Cocoa -lc++ -o onehand_mac
+
+# avvia (legge ./data/wordlist_it.txt)
+./onehand_mac
+```
+
+Si apre una finestra: scrivi con una mano (lo **spazio** è il jolly), vedi le
+parole comparire e il popup delle alternative. Il pulsante **Pulisci** azzera.
+
+> 🧩 **Come funziona il collegamento:** l'app Swift non parla direttamente col
+> C++; usa la **C ABI** (`core/include/onehand/onehand_c.h`), lo stesso ponte
+> pensato per Swift/C#/Rust. Il motore (`core/`) è identico a quello di Windows.
+
+---
+
 ## 2. Come si usa
 
 Premi **▶ Play** per attivarlo (diventa **⏹ Stop**), clicca in un campo di testo

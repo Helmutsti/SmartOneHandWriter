@@ -13,3 +13,9 @@ build*/
 *.exe
 *.pdb
 *.ilk
+
+# L'eseguibile della demo macOS (build manuale alla radice)
+/onehand_mac
+
+# Metadati macOS
+.DS_Store
