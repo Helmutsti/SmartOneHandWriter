@@ -1,0 +1,12 @@
+{
+  "hand": {
+    "available_keys": "qwertasdfgzxcvb"
+  },
+  "wordlist": "wordlist_it.txt",
+  "wildcard_matches": "unavailable",
+  "max_candidates": 8,
+  "punctuation": ",.?!:;'()-",
+  "timing": {
+    "double_press_ms": 280
+  }
+}
