@@ -1,0 +1,15 @@
+# Build CMake
+/build/
+build*/
+
+# Artefatti di compilazione
+*.o
+*.obj
+*.a
+*.lib
+*.dll
+*.dylib
+*.so
+*.exe
+*.pdb
+*.ilk

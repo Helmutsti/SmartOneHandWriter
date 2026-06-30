@@ -15,45 +15,143 @@ mano occupata, un braccio ingessato, il mouse…).
 
 ---
 
-## Cosa c'è in questa cartella
+## Com'è organizzato il progetto
 
-| File | A cosa serve | |
-|------|--------------|---|
-| `main.cpp` | Il codice sorgente (C++/Win32). | ✅ incluso |
-| `wordlist_it.txt` | Il dizionario italiano: una parola per riga, formato `parola`<kbd>TAB</kbd>`frequenza` (~49.000 parole, da OpenSubtitles 2018). | ✅ incluso |
-| `config.json` | Le impostazioni (lettere della mano, dizionario, tempi…). | ✅ incluso |
+Il codice è diviso in **motore** (logica pura, portabile) e **frontend** (parte
+specifica del sistema operativo). Così il cuore del programma si scrive una volta
+e ogni OS aggiunge solo il suo strato sottile.
+
+| Cartella / file | A cosa serve | |
+|-----------------|--------------|---|
+| `core/` | **Il motore**: dizionario, ricostruzione delle parole, composizione, punteggiatura, maiuscole. Nessuna dipendenza dal sistema operativo. | ✅ incluso |
+| `platform/windows/main_win32.cpp` | **Il frontend Windows**: cattura tasti, iniezione testo, finestrella Play/Stop, popup. Usa il motore. | ✅ incluso |
+| `data/wordlist_it.txt` | Il dizionario italiano: una parola per riga, formato `parola`<kbd>TAB</kbd>`frequenza` (~49.000 parole, da OpenSubtitles 2018). | ✅ incluso |
+| `data/config.json` | Le impostazioni (lettere della mano, dizionario, tempi…). | ✅ incluso |
 | `onehand.exe` | L'eseguibile. **Non è incluso: lo crei tu compilando** (vedi sotto). | ⚙️ da compilare |
 
-> ℹ️ In questo repository **non c'è** uno script `build.bat`. Compili con il
-> comando `cl` riportato qui sotto (oppure crei tu il tuo `build.bat` con quella
-> riga dentro, se preferisci avere un doppio clic).
+> 🧩 **Perché diviso così?** Il `core/` è una libreria senza GUI né tastiera: si
+> può testare da solo (`core/tests/`) e riusare per frontend su altri sistemi.
+> C'è anche una **C ABI** opzionale (`core/include/onehand/onehand_c.h`) per
+> chiamare il motore da altri linguaggi (Swift, C#, Rust…): si attiva con
+> `-DONEHAND_BUILD_C_ABI=ON` e non serve al frontend Windows.
 
 ---
 
-## 1. Compila
+## 1. Compila (Windows)
 
-Ti serve **Windows** e un compilatore C++ (i *Visual Studio Build Tools*, carico
-di lavoro «Sviluppo C++»).
+OneHand si compila su **Windows** in due modi: con **CMake** (consigliato) oppure
+a mano con `cl`. Sotto trovi entrambi, passo per passo.
 
-```bash
+### 1.0 Prerequisiti
+
+| Cosa | Come ottenerlo |
+|------|----------------|
+| **Compilatore C++** | [Visual Studio Build Tools](https://visualstudio.microsoft.com/it/downloads/) (gratis) → in fase di installazione spunta il carico di lavoro **«Sviluppo di applicazioni desktop con C++»**. In alternativa Visual Studio Community con lo stesso carico. |
+| **CMake** | Incluso nei Build Tools (componente «C++ CMake tools for Windows»), oppure da [cmake.org](https://cmake.org/download/) → durante l'installazione scegli **«Add CMake to the PATH»**. |
+| **Git** (facoltativo) | [git-scm.com](https://git-scm.com/), solo se cloni il repo invece di scaricarlo come ZIP. |
+
+Scarica il progetto:
+
+```bat
 git clone <url-del-repo>
 cd SmartOneHandWriter
 ```
 
-Apri **«x64 Native Tools Command Prompt for VS»** in questa cartella e lancia:
+> Niente Git? Scarica lo ZIP del repository, estrailo e apri quella cartella.
+
+---
+
+### 1.1 Metodo consigliato: CMake
+
+Apri il **«Developer Command Prompt for VS»** (o «x64 Native Tools Command Prompt
+for VS») dal menu Start, spostati nella cartella del progetto e lancia:
 
 ```bat
-cl /EHsc /DUNICODE /D_UNICODE main.cpp /link /SUBSYSTEM:WINDOWS user32.lib gdi32.lib /OUT:onehand.exe
+cmake -B build
+cmake --build build --config Release
 ```
 
-Crea `onehand.exe`. Fine: non c'è nessuna installazione, basta che `config.json`
-e `wordlist_it.txt` restino nella **stessa cartella** dell'eseguibile.
+- `cmake -B build` → prepara la build nella cartella `build\` (rileva il
+  compilatore e genera i file di progetto).
+- `cmake --build build --config Release` → compila in versione ottimizzata.
 
-> Vuoi un doppio clic per ricompilare? Crea un file `build.bat` accanto a
-> `main.cpp` con dentro la riga `cl …` qui sopra.
+Risultato: **`build\platform\windows\Release\onehand.exe`** (il percorso esatto
+può variare col generatore, es. `build\Release\` con alcuni). CMake **copia da
+solo** `config.json` e `wordlist_it.txt` accanto all'eseguibile: è già pronto
+all'uso, nessuna installazione.
 
 **Per avviarlo:** doppio clic su `onehand.exe`. Compare una finestrella con un
 pulsante **▶ Play**.
+
+> 🔁 **Ricompilare dopo una modifica:** ti basta rilanciare
+> `cmake --build build --config Release` (non serve ripetere `cmake -B build`).
+
+#### (Opzionale) Build a 64 bit esplicita
+
+Se vuoi forzare l'architettura a 64 bit con il generatore Visual Studio:
+
+```bat
+cmake -B build -G "Visual Studio 17 2022" -A x64
+cmake --build build --config Release
+```
+
+(`17 2022` è VS 2022; usa `16 2019` per VS 2019.)
+
+#### (Opzionale) Eseguire i test del motore
+
+I test verificano la logica del cuore (`core/tests/`) e **non richiedono la GUI**:
+
+```bat
+ctest --test-dir build --output-on-failure
+```
+
+#### (Opzionale) Costruire anche la C ABI
+
+Serve solo se vuoi chiamare il motore da altri linguaggi (Swift, C#, Rust…):
+
+```bat
+cmake -B build -DONEHAND_BUILD_C_ABI=ON
+cmake --build build --config Release
+```
+
+Produce la libreria condivisa `onehand_c.dll` accanto al resto. Il frontend
+Windows **non** ne ha bisogno.
+
+---
+
+### 1.2 Metodo alternativo: a mano con `cl` (senza CMake)
+
+Apri la **«x64 Native Tools Command Prompt for VS»** nella cartella del progetto
+e lancia (una sola riga; i `^` mandano a capo nel prompt di Windows):
+
+```bat
+cl /EHsc /std:c++17 /DUNICODE /D_UNICODE /I core\include ^
+   platform\windows\main_win32.cpp ^
+   core\src\engine.cpp core\src\dictionary.cpp core\src\config.cpp core\src\utf8.cpp ^
+   /link /SUBSYSTEM:WINDOWS user32.lib gdi32.lib /OUT:onehand.exe
+```
+
+Spiegazione dei pezzi principali:
+
+| Pezzo | A cosa serve |
+|-------|--------------|
+| `/std:c++17` | il progetto usa C++17. |
+| `/DUNICODE /D_UNICODE` | abilita le API Windows in versione Unicode (testo a 16 bit). |
+| `/I core\include` | fa trovare gli header del motore (`onehand/engine.hpp`…). |
+| i `core\src\*.cpp` | compila il motore **insieme** al frontend in un unico exe. |
+| `/SUBSYSTEM:WINDOWS` | app con finestre (non console). |
+| `user32.lib gdi32.lib` | librerie Windows per finestre, input e disegno. |
+
+Questo crea `onehand.exe` nella cartella corrente. In questo caso **copia tu**
+i due file dati accanto all'eseguibile (CMake lo fa da solo, `cl` no):
+
+```bat
+copy data\config.json .
+copy data\wordlist_it.txt .
+```
+
+> Vuoi un doppio clic per ricompilare? Crea un file `build.bat` con dentro la
+> riga `cl …` qui sopra (più i due `copy`), così ricompili lanciandolo.
 
 ---
 
