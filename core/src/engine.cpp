@@ -191,6 +191,7 @@ void Engine::actFinalizeOnEnter(Out& out) {
 void Engine::resetComposition() {
     pattern_.clear(); cands_.clear(); idx_ = 0; preview_.clear();
     committed_.clear(); pending_ = false; hasWord_ = false;
+    previewActive_ = false; previewCands_.clear();
     capNext_ = true; trailingSpace_ = false; singleLetter_ = false;
     punctMode_ = false; punctIdx_ = 0; removedSpace_ = false;
 }
@@ -209,22 +210,31 @@ void Engine::doDouble(Out& out, KeyKind k) {
 // ------------------------------------------------------------------ popup
 PopupEffect Engine::buildPopup() const {
     PopupEffect p;
-    // mostra: la tavolozza punteggiatura, oppure le alternative se >1
-    if (!(punctMode_ || cands_.size() > 1)) { p.visible = false; return p; }
 
-    std::wstring t;
+    // tavolozza punteggiatura (ha la precedenza)
     if (punctMode_) {
+        std::wstring t;
         for (int i = 0; i < static_cast<int>(cfg_.punctuation.size()); ++i) {
             if (i) t += L"  ";
             if (i == punctIdx_) { t += L"["; t += cfg_.punctuation[i]; t += L"]"; }
             else t += cfg_.punctuation[i];
         }
-    } else {
-        for (int i = 0; i < static_cast<int>(cands_.size()); ++i) {
-            if (i) t += L"   ";
-            if (i == idx_) { t += L"["; t += cands_[i]; t += L"]"; }
-            else t += cands_[i];
-        }
+        p.visible = true;
+        p.text = t;
+        return p;
+    }
+
+    // mentre lo spazio (jolly) e' in attesa del doppio-tap, mostra in anteprima
+    // i candidati che si otterrebbero col jolly; altrimenti le alternative reali.
+    const std::vector<std::wstring>& list = previewActive_ ? previewCands_ : cands_;
+    const int sel = previewActive_ ? 0 : idx_;
+    if (list.size() <= 1) { p.visible = false; return p; }
+
+    std::wstring t;
+    for (int i = 0; i < static_cast<int>(list.size()); ++i) {
+        if (i) t += L"   ";
+        if (i == sel) { t += L"["; t += list[i]; t += L"]"; }
+        else t += list[i];
     }
     p.visible = true;
     p.text = t;
@@ -235,6 +245,7 @@ PopupEffect Engine::buildPopup() const {
 Effects Engine::onKey(const KeyEvent& key) {
     Out out;
     Effects fx;
+    previewActive_ = false;   // l'anteprima vale solo finche' lo spazio resta in attesa
 
     if (key.kind == KeyKind::Space || key.kind == KeyKind::Backspace) {
         if (pending_ && pendingKey_ == key.kind) {       // seconda pressione -> DOPPIA
@@ -247,6 +258,11 @@ Effects Engine::onKey(const KeyEvent& key) {
             pendingKey_ = key.kind;
             fx.timer.action = TimerEffect::Action::Start; // Start = riavvia (il frontend kill+set)
             fx.timer.ms = cfg_.doublePressMs;
+            // anteprima: i candidati del jolly, senza ancora applicarlo allo scheletro
+            if (key.kind == KeyKind::Space && !pattern_.empty()) {
+                previewCands_ = dict_->computeCandidates(pattern_ + L'?', cfg_.maxCandidates);
+                previewActive_ = true;
+            }
         }
     } else {
         if (pending_) {
@@ -271,6 +287,7 @@ Effects Engine::onKey(const KeyEvent& key) {
 Effects Engine::onTimeout() {
     Out out;
     Effects fx;
+    previewActive_ = false;   // il jolly viene applicato qui: tornano i candidati reali
     if (pending_) {
         KeyKind k = pendingKey_;
         pending_ = false;

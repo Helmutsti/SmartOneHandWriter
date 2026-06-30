@@ -56,6 +56,10 @@ private:
     bool    pending_ = false;
     KeyKind pendingKey_ = KeyKind::Space;
 
+    // anteprima dei candidati mentre lo spazio (jolly) e' in attesa del doppio-tap
+    bool                      previewActive_ = false;
+    std::vector<std::wstring> previewCands_;
+
     // spaziatura / maiuscole / punteggiatura
     bool capNext_       = true;
     bool trailingSpace_ = false;

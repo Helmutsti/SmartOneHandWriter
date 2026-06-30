@@ -10,6 +10,9 @@
 
 import Cocoa
 
+// Messaggi diagnostici su stderr (es. quale dizionario viene caricato).
+private func dbg(_ s: String) { FileHandle.standardError.write(Data((s + "\n").utf8)) }
+
 // Costanti dei tipi di tasto: combaciano con onehand::KeyKind / ONEHAND_KEY_*.
 private let KIND_LETTER:    Int32 = 0
 private let KIND_SPACE:     Int32 = 1
@@ -33,9 +36,14 @@ private func wstr(_ p: UnsafePointer<wchar_t>?) -> String {
 
 final class OneHandView: NSView {
     private let engine: OpaquePointer
-    private var buffer = ""   // testo composto, interamente guidato dal motore
-    private var popup  = ""   // riga del popup (alternative / punteggiatura)
-    private var timer: Timer? // timer del doppio-tap, pilotato dagli effetti
+    private var buffer = ""        // testo composto, interamente guidato dal motore
+    private var popup  = ""        // riga del popup (alternative / punteggiatura)
+    private var timer: Timer?      // timer del doppio-tap, pilotato dagli effetti
+    private var pendingWildcard = false  // spazio in attesa: mostra '?' a schermo
+
+    // ciò che si vede: il testo del motore + il '?' del jolly ancora in attesa,
+    // cosi' la lunghezza scritta combacia con quella dei suggerimenti.
+    private var displayText: String { buffer + (pendingWildcard ? "?" : "") }
 
     init(engine: OpaquePointer) {
         self.engine = engine
@@ -69,6 +77,9 @@ final class OneHandView: NSView {
         }
         onehand_on_key(engine, kind, letter)
         applyEffects()
+        // se lo spazio resta in attesa (timer Start), il jolly '?' va mostrato
+        pendingWildcard = (kind == KIND_SPACE && onehand_timer_action(engine) == 1)
+        needsDisplay = true
     }
 
     // ---- applica gli effetti restituiti dal motore (stesso schema del FE Windows) ----
@@ -96,12 +107,15 @@ final class OneHandView: NSView {
             guard let self = self else { return }
             onehand_on_timeout(self.engine)
             self.applyEffects()
+            self.pendingWildcard = false   // il jolly e' stato applicato dal timeout
+            self.needsDisplay = true
         }
     }
 
     @objc func clearPressed() {
         onehand_reset(engine)
         buffer = ""; popup = ""
+        pendingWildcard = false
         timer?.invalidate(); timer = nil
         needsDisplay = true
     }
@@ -123,7 +137,7 @@ final class OneHandView: NSView {
         let textRect = NSRect(x: pad, y: pad,
                               width: bounds.width - 2 * pad,
                               height: bounds.height - 2 * pad - 30)
-        (buffer as NSString).draw(in: textRect, withAttributes: textAttr)
+        (displayText as NSString).draw(in: textRect, withAttributes: textAttr)
         (popup as NSString).draw(at: NSPoint(x: pad, y: bounds.height - pad - 20),
                                  withAttributes: popupAttr)
     }
@@ -137,8 +151,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 // MARK: - avvio
 
-private func dataDir() -> String {
-    CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "data"
+// Cerca wordlist_it.txt in piu' posti, cosi' funziona comunque tu lo lanci:
+// argomento esplicito, cartella corrente, oppure accanto all'eseguibile.
+private func resolveWordlist() -> String {
+    let fm = FileManager.default
+    var tries: [String] = []
+    if CommandLine.arguments.count > 1 {
+        let a = CommandLine.arguments[1]
+        tries.append(a)                       // percorso diretto al file
+        tries.append(a + "/wordlist_it.txt")  // cartella dati
+    }
+    tries.append("data/wordlist_it.txt")      // CWD/data
+    tries.append("wordlist_it.txt")           // CWD
+    if let exe = Bundle.main.executablePath {  // accanto all'eseguibile
+        let dir = (exe as NSString).deletingLastPathComponent
+        tries.append(dir + "/data/wordlist_it.txt")
+        tries.append(dir + "/wordlist_it.txt")
+        tries.append(dir + "/../data/wordlist_it.txt")
+    }
+    for t in tries where fm.fileExists(atPath: t) {
+        dbg("dizionario trovato in: \(t)")
+        return t
+    }
+    dbg("dizionario NON trovato. Provati: \(tries)")
+    return "data/wordlist_it.txt"
 }
 
 let app = NSApplication.shared
@@ -148,8 +184,10 @@ let delegate = AppDelegate()
 app.delegate = delegate
 
 guard let engine = onehand_create() else { fatalError("impossibile creare il motore") }
-let wordlist = dataDir() + "/wordlist_it.txt"
-if onehand_load_wordlist_file(engine, wordlist) == 0 {
+let wordlist = resolveWordlist()
+let loaded = onehand_load_wordlist_file(engine, wordlist)
+dbg("dizionario: \(wordlist) caricato=\(loaded)")
+if loaded == 0 {
     FileHandle.standardError.write(Data("OneHand: dizionario non trovato: \(wordlist)\n".utf8))
 }
 
