@@ -15,24 +15,42 @@ mano occupata, un braccio ingessato, il mouse…).
 
 ---
 
-## 1. Scarica e compila
+## Cosa c'è in questa cartella
+
+| File | A cosa serve | |
+|------|--------------|---|
+| `main.cpp` | Il codice sorgente (C++/Win32). | ✅ incluso |
+| `wordlist_it.txt` | Il dizionario italiano: una parola per riga, formato `parola`<kbd>TAB</kbd>`frequenza` (~49.000 parole, da OpenSubtitles 2018). | ✅ incluso |
+| `config.json` | Le impostazioni (lettere della mano, dizionario, tempi…). | ✅ incluso |
+| `onehand.exe` | L'eseguibile. **Non è incluso: lo crei tu compilando** (vedi sotto). | ⚙️ da compilare |
+
+> ℹ️ In questo repository **non c'è** uno script `build.bat`. Compili con il
+> comando `cl` riportato qui sotto (oppure crei tu il tuo `build.bat` con quella
+> riga dentro, se preferisci avere un doppio clic).
+
+---
+
+## 1. Compila
 
 Ti serve **Windows** e un compilatore C++ (i *Visual Studio Build Tools*, carico
 di lavoro «Sviluppo C++»).
 
 ```bash
 git clone <url-del-repo>
-cd writer
+cd SmartOneHandWriter
 ```
 
 Apri **«x64 Native Tools Command Prompt for VS»** in questa cartella e lancia:
 
-```bash
-build.bat
+```bat
+cl /EHsc /DUNICODE /D_UNICODE main.cpp /link /SUBSYSTEM:WINDOWS user32.lib gdi32.lib /OUT:onehand.exe
 ```
 
 Crea `onehand.exe`. Fine: non c'è nessuna installazione, basta che `config.json`
-e `wordlist_it.txt` restino nella stessa cartella dell'eseguibile.
+e `wordlist_it.txt` restino nella **stessa cartella** dell'eseguibile.
+
+> Vuoi un doppio clic per ricompilare? Crea un file `build.bat` accanto a
+> `main.cpp` con dentro la riga `cl …` qui sopra.
 
 **Per avviarlo:** doppio clic su `onehand.exe`. Compare una finestrella con un
 pulsante **▶ Play**.
@@ -58,6 +76,9 @@ e scrivi. Premi **⏹ Stop** per tornare alla tastiera normale.
 
 «×2» = due pressioni veloci dello stesso tasto.
 
+Mentre componi, un piccolo **popup** vicino al cursore mostra le alternative
+(quando ce n'è più d'una) o i segni di punteggiatura.
+
 ### Maiuscole e punteggiatura
 
 Tre comodità che funzionano da sole:
@@ -70,12 +91,15 @@ Tre comodità che funzionano da sole:
 - **Maiuscola di una lettera**: se hai scritto una **sola lettera**, con **Tab**
   scegli tra minuscola e **MAIUSCOLA** (es. `a` → `A`).
 
+> Le scorciatoie con **Ctrl / Alt / Win** non vengono toccate: funzionano sempre,
+> anche con OneHand attivo.
+
 ---
 
 ## 3. Personalizza: il file `config.json`
 
 È un file di testo accanto all'eseguibile. Lo modifichi, **salvi e riavvii**
-OneHand. Ecco com'è fatto:
+OneHand. Ecco com'è fatto (questi sono i valori di default):
 
 ```json
 {
@@ -91,7 +115,7 @@ OneHand. Ecco com'è fatto:
 | Voce | A cosa serve |
 |------|--------------|
 | `available_keys` | Le lettere che la tua mano riesce a premere. Cambiala in base alla mano: sinistra `qwertasdfgzxcvb`, destra `yuiophjklnm`. |
-| `wordlist` | Il dizionario da usare (un file di parole). |
+| `wordlist` | Il dizionario da usare (un file di parole nella stessa cartella). |
 | `wildcard_matches` | `"unavailable"` = il jolly è solo una lettera che non puoi digitare (consigliato). `"any"` = qualsiasi lettera. |
 | `max_candidates` | Quante alternative mostrare quando premi Tab. |
 | `punctuation` | I segni che compaiono (nell'ordine) quando apri la punteggiatura con Tab. |
@@ -99,6 +123,13 @@ OneHand. Ecco com'è fatto:
 
 Regole rapide del formato: virgolette `"..."` per il testo, numeri senza
 virgolette, virgola tra una voce e l'altra ma **non** dopo l'ultima.
+
+### Usare un altro dizionario
+
+Il file indicato in `wordlist` deve avere **una parola per riga**. Puoi mettere
+solo la parola, oppure `parola`<kbd>TAB</kbd>`frequenza` (o uno spazio al posto
+del TAB): le parole più frequenti vengono proposte per prime. Le righe vuote e
+quelle che iniziano con `#` vengono ignorate.
 
 ---
 
@@ -117,5 +148,4 @@ Mano sinistra attiva (ti mancano `i o u l m n h p`…):
 
 ### Buono a sapersi
 Mentre OneHand è attivo, lo spazio e il Backspace servono a comporre le parole:
-per scrivere o cancellare in modo normale, premi **⏹ Stop**. Le scorciatoie con
-**Ctrl / Alt / Win** funzionano sempre.
+per scrivere o cancellare in modo normale, premi **⏹ Stop**.
