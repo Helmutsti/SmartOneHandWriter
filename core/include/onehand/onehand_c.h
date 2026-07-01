@@ -51,7 +51,8 @@ enum {
     ONEHAND_ACTION_CONFIRM_NEW_WORD= 7,
     ONEHAND_ACTION_OPEN_PREV_WORD  = 8,
     ONEHAND_ACTION_OPEN_NEXT_WORD  = 9,
-    ONEHAND_ACTION_OPEN_WORD_AT    = 10   /* usa onehand_on_action_index */
+    ONEHAND_ACTION_OPEN_WORD_AT    = 10,  /* usa onehand_on_action_index */
+    ONEHAND_ACTION_ACCEPT_SUGGESTION = 11 /* usa onehand_on_action_index (indice del chip) */
 };
 
 /* Struct C "piatta" per la configurazione (stringhe come const wchar_t*). */
@@ -99,6 +100,15 @@ int            onehand_word_count(OnehandEngine* e);
 int            onehand_open_index(OnehandEngine* e);   /* -1 = caret in coda */
 int            onehand_caret(OnehandEngine* e);         /* offset in onehand_render_text */
 const wchar_t* onehand_render_text(OnehandEngine* e);   /* valido fino al prossimo evento */
+
+/* Suggerimenti di parola successiva (chip): validi a inizio parola. */
+int            onehand_nextword_count(OnehandEngine* e);
+const wchar_t* onehand_nextword_at(OnehandEngine* e, int i);  /* valido fino al prossimo evento */
+
+/* Aggancia un predittore n-gram caricando i bigrammi da file
+ * ("w1<TAB>w2<TAB>conteggio"). Restituisce 1 se caricato, 0 altrimenti.
+ * Sostituisce il predittore corrente (default: frequenza). */
+int onehand_load_bigrams_file(OnehandEngine* e, const char* path);
 
 /* Lettura degli effetti dell'ultimo evento. */
 int            onehand_edit_count(OnehandEngine* e);

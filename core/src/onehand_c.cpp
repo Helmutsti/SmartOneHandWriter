@@ -2,14 +2,17 @@
 // dell'ultimo evento per la lettura "pull".
 #include "onehand/onehand_c.h"
 #include "onehand/engine.hpp"
+#include "onehand/ngram_predictor.hpp"
 
 #include <fstream>
+#include <memory>
 
 struct OnehandEngine {
     onehand::Engine engine;
     onehand::Effects last;
     onehand::Config  cfg;   // ultima configurazione applicata (per i getter onehand_config_*)
-    std::wstring     renderCache;   // buffer stabile per onehand_render_text
+    std::wstring     renderCache;    // buffer stabile per onehand_render_text
+    std::wstring     nextWordCache;  // buffer stabile per onehand_nextword_at
 };
 
 extern "C" {
@@ -77,6 +80,23 @@ const wchar_t* onehand_render_text(OnehandEngine* e) {
     if (!e) return L"";
     e->renderCache = e->engine.renderText();
     return e->renderCache.c_str();
+}
+
+int onehand_nextword_count(OnehandEngine* e) { return e ? e->engine.nextWordCount() : 0; }
+const wchar_t* onehand_nextword_at(OnehandEngine* e, int i) {
+    if (!e) return L"";
+    e->nextWordCache = e->engine.nextWordAt(i);
+    return e->nextWordCache.c_str();
+}
+
+int onehand_load_bigrams_file(OnehandEngine* e, const char* path) {
+    if (!e || !path) return 0;
+    std::ifstream f(path, std::ios::binary);
+    if (!f) return 0;
+    auto p = std::unique_ptr<onehand::NgramPredictor>(new onehand::NgramPredictor());
+    p->loadBigrams(f);
+    e->engine.setPredictor(std::move(p));
+    return 1;
 }
 
 int onehand_edit_count(OnehandEngine* e) {

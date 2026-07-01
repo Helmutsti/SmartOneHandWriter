@@ -227,6 +227,47 @@ void Engine::actDeleteWord() {
     }
 }
 
+// Inserisce una parola suggerita come parola risolta e apre una nuova parola
+// vuota a destra per continuare. Le celle usano la lettera stessa come "tasto"
+// (gruppo di 1), cosi', se riaperta, resta coerente col resto.
+void Engine::actAcceptSuggestion(int index) {
+    if (index < 0 || index >= static_cast<int>(nextWords_.size())) return;
+    std::wstring w = nextWords_[index];
+    if (w.empty()) return;
+
+    int at;
+    if (openIndex_ >= 0 && doc_.words[openIndex_].cells.empty()) {
+        at = openIndex_;                                  // rimpiazza la parola vuota aperta
+        doc_.words.erase(doc_.words.begin() + at);
+    } else {
+        resolveCurrent();                                 // chiudi la parola in corso
+        at = static_cast<int>(doc_.words.size());         // inserisci in coda
+    }
+
+    Word nw;
+    for (wchar_t ch : w) nw.cells.push_back({ch, ch});
+    nw.cands.push_back(w);
+    nw.realCount = 1;
+    nw.idx = 0;
+    nw.state = WordState::Resolved;
+    nw.capFirst = sentenceStart_;
+
+    doc_.words.insert(doc_.words.begin() + at, nw);
+    sentenceStart_ = false;
+
+    Word empty;                                           // nuova parola vuota per continuare
+    doc_.words.insert(doc_.words.begin() + at + 1, empty);
+    openIndex_ = at + 1;
+}
+
+// Ricalcola i suggerimenti di parola successiva: solo quando la parola aperta e'
+// vuota o assente (a inizio parola); mentre si compone, i chip spariscono e il
+// popup mostra i candidati della parola in corso.
+void Engine::recomputeNextWords() {
+    if (openIndex_ >= 0 && !doc_.words[openIndex_].cells.empty()) { nextWords_.clear(); return; }
+    nextWords_ = predictor_->predictNextWord(buildContext(), cfg_.maxCandidates);
+}
+
 // ------------------------------------------------------------------ popup
 PopupEffect Engine::buildPopup() const {
     PopupEffect p;
@@ -257,6 +298,7 @@ Effects Engine::onActionIndex(Action a, int index) {
         openIndex_ = -1;
         sentenceStart_ = true;
         lastRender_.clear();          // il campo va a capo: la nostra riga riparte da zero
+        recomputeNextWords();
         fx.passThrough = true;
         fx.popup = buildPopup();
         return fx;
@@ -279,10 +321,12 @@ Effects Engine::onActionIndex(Action a, int index) {
             if (openIndex_ >= 0) gotoWord(openIndex_ + 1);
             break;
         case Action::OpenWordAt:     gotoWord(index); break;
+        case Action::AcceptSuggestion: actAcceptSuggestion(index); break;
         default: break;
     }
 
     emit(out);
+    recomputeNextWords();
     fx.edits = std::move(out.edits);
     fx.popup = buildPopup();
     return fx;
@@ -317,6 +361,7 @@ Effects Engine::reset() {
     openIndex_ = -1;
     lastRender_.clear();
     sentenceStart_ = true;
+    nextWords_.clear();
     Effects fx;
     fx.popup.visible = false;
     fx.timer.action = TimerEffect::Action::Cancel;

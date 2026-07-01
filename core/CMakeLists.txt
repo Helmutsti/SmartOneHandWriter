@@ -8,6 +8,7 @@ add_library(onehand_core STATIC
     src/utf8.cpp
     src/alterations.cpp
     src/predictor_frequency.cpp
+    src/ngram_predictor.cpp
 )
 target_include_directories(onehand_core
     PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/include

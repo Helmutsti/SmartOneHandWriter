@@ -48,6 +48,7 @@ enum class Action {
     OpenPrevWord  = 8,  // riapre la parola a sinistra di quella aperta
     OpenNextWord  = 9,  // riapre la parola a destra di quella aperta
     OpenWordAt    = 10, // accesso casuale: riapre la parola all'indice dato (solo editor interno)
+    AcceptSuggestion=11,// inserisce la parola suggerita (indice) come parola risolta e avanza
 };
 
 // ------------------------------------------------------------------ effetti

@@ -49,6 +49,13 @@ public:
     int          caret() const;
     std::wstring renderText() const;
 
+    // Suggerimenti di parola successiva (chip): validi quando la parola aperta e'
+    // vuota / assente; vuoti mentre si sta componendo una parola.
+    int          nextWordCount() const { return static_cast<int>(nextWords_.size()); }
+    std::wstring nextWordAt(int i) const {
+        return (i >= 0 && i < static_cast<int>(nextWords_.size())) ? nextWords_[i] : std::wstring();
+    }
+
 private:
     // Raccoglitore di modifiche (backspaces + insert).
     struct Out {
@@ -62,6 +69,7 @@ private:
     int          openIndex_    = -1;    // parola aperta, o -1 (caret in coda)
     std::wstring lastRender_;           // testo canonico emesso finora (base del diff)
     bool         sentenceStart_ = true; // maiuscola iniziale sulla prima parola
+    std::vector<std::wstring> nextWords_; // suggerimenti di parola successiva (chip)
 
     Config                      cfg_;
     std::unique_ptr<Dictionary> dict_;
@@ -86,6 +94,9 @@ private:
     void actConfirmNewWord();
     void actDeleteChar();
     void actDeleteWord();
+    void actAcceptSuggestion(int index);
+
+    void recomputeNextWords();
 
     PopupEffect buildPopup() const;
 };

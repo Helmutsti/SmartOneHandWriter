@@ -6,6 +6,7 @@
 // rappresenta un gruppo di lettere; il dizionario disambigua la parola.
 #include "onehand/engine.hpp"
 #include "onehand/predictor.hpp"
+#include "onehand/ngram_predictor.hpp"
 
 #include <cstdio>
 #include <sstream>
@@ -46,6 +47,7 @@ void loadDict(Field& f) {
         "band\t90\n"
         "casa\t80\n"
         "sole\t60\n"
+        "un\t50\n"
         "a\t5000\n");
     f.engine.setConfig(onehand::Config{});   // keymap default: numpad T9
     f.engine.loadWordlist(dict);
@@ -158,6 +160,40 @@ void test_minimal_diff() {
     check("diff-text", f.text, L"Aam");
 }
 
+// Predittore n-gram: re-rank contestuale delle collisioni + chip di prossima
+// parola. Dopo "un", il bigramma promuove "band" davanti a "cane".
+void test_ngram_rerank_and_nextword() {
+    Field f; loadDict(f);
+    auto ng = std::unique_ptr<onehand::NgramPredictor>(new onehand::NgramPredictor());
+    std::istringstream bi("un\tband\t100\nun\tcane\t1\n");
+    ng->loadBigrams(bi);
+    f.engine.setPredictor(std::move(ng));
+
+    f.type(L"86");                       // "un" (u=8, n=6) -> "Un" (inizio frase)
+    check("ng-un", f.text, L"Un");
+    f.action(Action::ConfirmNewWord);    // "Un "
+    check("ng-next0", f.engine.nextWordAt(0), L"band");   // chip dal bigramma
+
+    f.type(L"2263");                     // collisione cane/band: il contesto promuove band
+    check("ng-rerank", f.text, L"Un band");
+    checkInt("ng-next-hidden", f.engine.nextWordCount(), 0);   // mentre compongo, niente chip
+}
+
+// Accetta la parola suggerita (chip): la inserisce risolta e avanza.
+void test_accept_suggestion() {
+    Field f; loadDict(f);
+    auto ng = std::unique_ptr<onehand::NgramPredictor>(new onehand::NgramPredictor());
+    std::istringstream bi("un\tband\t100\n");
+    ng->loadBigrams(bi);
+    f.engine.setPredictor(std::move(ng));
+
+    f.type(L"86");                          // "Un"
+    f.action(Action::ConfirmNewWord);       // "Un "
+    check("as-next0", f.engine.nextWordAt(0), L"band");
+    f.action(Action::AcceptSuggestion, 0);  // accetta "band" senza digitarla
+    check("as-text", f.text, L"Un band ");
+}
+
 // reset() ripulisce lo stato del motore.
 void test_reset() {
     Field f; loadDict(f);
@@ -179,6 +215,8 @@ int main() {
     test_random_access_reopen_roll();
     test_predictor_reranks();
     test_minimal_diff();
+    test_ngram_rerank_and_nextword();
+    test_accept_suggestion();
     test_reset();
     if (g_failures) { std::printf("%d test FALLITI\n", g_failures); return 1; }
     std::printf("tutti i test OK\n");
