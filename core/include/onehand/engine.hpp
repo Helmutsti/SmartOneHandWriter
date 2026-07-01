@@ -57,6 +57,11 @@ private:
     int                       idx_ = 0;     // candidato selezionato
     std::wstring              preview_;     // testo gia' iniettato per la parola corrente
     std::vector<std::wstring> committed_;   // parole confermate (ognuna col suo spazio)
+    // scheletro originale (jolly '?' compresi) di ogni parola in committed_, alla
+    // stessa posizione: serve a riaprire una parola confermata (Backspace) senza
+    // perdere i jolly, cosi' il dizionario torna a proporre alternative. Vuoto per
+    // i token di punteggiatura (mai riaperti da questo meccanismo).
+    std::vector<std::wstring> committedPatterns_;
     std::wstring              popupText_;   // ultimo testo del popup
 
     // doppia pressione

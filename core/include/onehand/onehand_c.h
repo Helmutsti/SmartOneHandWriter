@@ -36,6 +36,20 @@ enum {
     ONEHAND_TIMER_CANCEL = 2
 };
 
+/* Deve combaciare con onehand::Action (stesso ordine). Percorso "esplicito":
+ * il frontend risolve gia' quale tasto fisico e quale pressione (singola/
+ * doppia) attivano la funzione, e chiede una singola azione (vedi il
+ * frontend Windows, che gestisce il timer del doppio-tap da solo). */
+enum {
+    ONEHAND_ACTION_LETTER      = 0,
+    ONEHAND_ACTION_WILDCARD    = 1,
+    ONEHAND_ACTION_ACCEPT      = 2,
+    ONEHAND_ACTION_ROLLING     = 3,
+    ONEHAND_ACTION_DELETE_CHAR = 4,
+    ONEHAND_ACTION_DELETE_WORD = 5,
+    ONEHAND_ACTION_FINALIZE    = 6
+};
+
 /* Struct C "piatta" per la configurazione (stringhe come const wchar_t*). */
 typedef struct {
     const wchar_t* available_keys;
@@ -55,10 +69,29 @@ void           onehand_destroy(OnehandEngine* e);
 void onehand_set_config(OnehandEngine* e, const OnehandConfig* cfg);
 int  onehand_load_wordlist_file(OnehandEngine* e, const char* path);
 
+/* Applica la configurazione leggendo direttamente il testo di config.json
+ * (stesso parser tollerante usato dal frontend Windows: onehand::parseConfig).
+ * Un'unica implementazione condivisa da tutti i frontend che leggono il file
+ * cosi' com'e', invece di riempire a mano OnehandConfig. */
+void onehand_apply_config_json(OnehandEngine* e, const char* json_utf8);
+
+/* Letture della configurazione applicata (valide finche' non se ne applica
+ * un'altra): servono al frontend per popolare la propria UI. */
+const wchar_t* onehand_config_available_keys(OnehandEngine* e);
+const wchar_t* onehand_config_wordlist_name(OnehandEngine* e);
+int            onehand_config_double_press_ms(OnehandEngine* e);
+
 /* Eventi: calcolano gli effetti, poi leggibili con le funzioni qui sotto. */
 void onehand_on_key(OnehandEngine* e, int kind, wchar_t letter);
 void onehand_on_timeout(OnehandEngine* e);
 void onehand_reset(OnehandEngine* e);
+
+/* Percorso esplicito (vedi ONEHAND_ACTION_*): nessun timer qui, lo gestisce
+ * il frontend, che decide quale tasto fisico e quale pressione la attivano. */
+void onehand_on_action(OnehandEngine* e, int action, wchar_t letter);
+/* Anteprima dei candidati col jolly, senza applicarlo: per mostrare cosa
+ * produrrebbe mentre il frontend attende l'eventuale doppia pressione. */
+void onehand_preview_wildcard(OnehandEngine* e);
 
 /* Lettura degli effetti dell'ultimo evento. */
 int            onehand_edit_count(OnehandEngine* e);

@@ -80,8 +80,10 @@ un pulsante **▶ Play**. → Vai alla **[Parte 2 · Come si usa](#parte-2--come
 
 ## 🍏 Installazione su Mac (demo)
 
-Su Mac per ora c'è una **demo**: una finestra con dentro un foglio su cui provare
-OneHand. Serve a **vederlo funzionare subito** e **non chiede alcun permesso**.
+Su Mac per ora c'è una **demo**: una finestra con dentro un pannello di
+configurazione (identico nelle funzioni a quello Windows: mano, dizionario,
+tasti funzione riassegnabili, Play/Stop) e un foglio su cui provare OneHand.
+Serve a **vederlo funzionare subito** e **non chiede alcun permesso**.
 (Scrivere anche nelle *altre* app del Mac sarà un passo successivo.)
 
 ### Cosa serve (una volta sola)
@@ -112,9 +114,15 @@ swiftc platform/macos/main.swift *.o \
 ./onehand_mac
 ```
 
-Si apre una finestra: scrivi con una mano (lo **spazio** è il jolly), vedi le
-parole comparire e il riquadro delle alternative. Il pulsante **Pulisci** azzera.
-→ Vai alla **[Parte 2 · Come si usa](#parte-2--come-si-usa)**.
+Si apre una finestra col pannello di configurazione in alto (mano, dizionario,
+tasti funzione, Play/Stop) e il foglio di prova sotto. Premi **▶ Play**, clicca
+nel foglio e scrivi con una mano (lo **spazio** è il jolly di default): vedi le
+parole comparire e il riquadro delle alternative. Il pulsante **Pulisci** azzera
+il foglio. → Vai alla **[Parte 2 · Come si usa](#parte-2--come-si-usa)**.
+
+> A differenza di Windows, qui si scrive **solo dentro questa finestra**: le
+> impostazioni (`config.json`, tasti funzione) sono le stesse, ma OneHand non
+> intercetta ancora la tastiera nelle altre app del Mac.
 
 ---
 
@@ -251,8 +259,12 @@ sistema aggiunge solo il suo strato sottile.
 | `data/config.json` | Le impostazioni. |
 
 > C'è una **C ABI** opzionale (`core/include/onehand/onehand_c.h`) per chiamare il
-> motore da altri linguaggi (Swift, C#, Rust…). La usa la demo macOS; il frontend
-> Windows non ne ha bisogno.
+> motore da altri linguaggi (Swift, C#, Rust…). La usa la demo macOS (incluso il
+> percorso "azione esplicita" `onehand_on_action`/`onehand_preview_wildcard`, lo
+> stesso schema di tasti-funzione riassegnabili del frontend Windows, e
+> `onehand_apply_config_json` per leggere `config.json` con lo stesso parser
+> tollerante). Il frontend Windows chiama `onehand::Engine` direttamente e non
+> ne ha bisogno.
 
 ## Windows: opzioni aggiuntive
 

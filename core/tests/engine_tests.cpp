@@ -176,6 +176,30 @@ void test_delword_with_question_mark() {
     check("delword-q-word", f.text, L"");
 }
 
+// Riapertura di una parola confermata (Backspace singolo): deve mantenere il
+// jolly originale, non il testo letterale (che perde il '?'), altrimenti il
+// dizionario smette di proporre alternative dopo un Backspace su una parola
+// gia' confermata (bug segnalato dall'utente).
+void test_reopen_word_keeps_wildcard() {
+    Field f;
+    std::istringstream dict("cane\t100\ncyne\t90\n");
+    onehand::Config cfg; cfg.wildcardAny = true;   // jolly = qualunque lettera, per semplicita'
+    f.engine.setConfig(cfg);
+    f.engine.loadWordlist(dict);
+
+    f.letter(L'c');
+    f.space(); f.timeout();     // jolly per la seconda lettera
+    f.letter(L'n'); f.letter(L'e');
+    f.space(); f.space();       // conferma -> "Cane " (candidato piu' frequente, maiuscola iniziale)
+    check("reopen-accept", f.text, L"Cane ");
+
+    f.backspace(); f.timeout(); // backspace singolo -> riapre senza l'ultima lettera
+    f.letter(L'e');              // ridigita la 'e': il jolly deve essere ancora li'
+    check("reopen-reprint", f.text, L"cane");
+    f.tab();                     // Rolling: se il jolly e' sopravvissuto, scorre all'alternativa
+    check("reopen-alternative", f.text, L"cyne");
+}
+
 } // namespace
 
 int main() {
@@ -188,6 +212,7 @@ int main() {
     test_delete_punct_two_steps();
     test_action_accept_and_delete_word();
     test_delword_with_question_mark();
+    test_reopen_word_keeps_wildcard();
     if (g_failures) { std::printf("%d test FALLITI\n", g_failures); return 1; }
     std::printf("tutti i test OK\n");
     return 0;

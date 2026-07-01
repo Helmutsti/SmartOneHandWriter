@@ -135,6 +135,7 @@ void Engine::commitPunct(Out& out) {
         && committed_.back().back() == L' ')
         committed_.back().pop_back();         // la parola prima ha perso lo spazio
     committed_.push_back(std::wstring(1, p) + L" ");
+    committedPatterns_.push_back(L"");   // punteggiatura: nessuno scheletro da riaprire
     preview_.clear();
     punctMode_ = false; removedSpace_ = false; trailingSpace_ = true;
     if (p == L'.' || p == L'!' || p == L'?') capNext_ = true;  // maiuscola dopo il punto
@@ -167,6 +168,7 @@ void Engine::actAccept(Out& out) {
     std::wstring disp = displayWord();
     out.insert(L" ");
     committed_.push_back(disp + L" ");
+    committedPatterns_.push_back(pattern_);
     pattern_.clear(); cands_.clear(); idx_ = 0; preview_.clear();
     singleLetter_ = false; trailingSpace_ = true; capNext_ = false;
     hasWord_ = false;
@@ -192,6 +194,7 @@ void Engine::actDeleteChar(Out& out) {
         } else {
             out.backspace(back.size());  // 2° passo: via il segno...
             committed_.pop_back();
+            if (!committedPatterns_.empty()) committedPatterns_.pop_back();
             if (!committed_.empty() && !committed_.back().empty()
                 && committed_.back().back() != L' ') {
                 committed_.back().push_back(L' ');   // ...e ripristina lo spazio della parola prima
@@ -208,12 +211,21 @@ void Engine::actDeleteChar(Out& out) {
         return;
     }
 
-    // token di parola: riapri la parola meno l'ultimo carattere (comportamento storico)
+    // token di parola: riapri la parola meno l'ultimo carattere. Usa lo scheletro
+    // originale (jolly '?' compresi), non il testo visualizzato: senza '?' il
+    // dizionario non cerca piu' alternative (computeCandidates le propone solo in
+    // presenza di un jolly), quindi ripartire dal testo letterale perdeva le
+    // proposte del dizionario per una parola gia' confermata.
     std::wstring tok = back;
+    std::wstring origPat = committedPatterns_.empty() ? L"" : committedPatterns_.back();
     committed_.pop_back();
+    if (!committedPatterns_.empty()) committedPatterns_.pop_back();
     out.backspace(tok.size());                 // rimuovi tutto il token
     if (!tok.empty() && tok.back() == L' ') tok.pop_back();
-    pattern_ = tok.empty() ? L"" : tok.substr(0, tok.size() - 1);  // riapri senza ultimo char
+    if (!origPat.empty())
+        pattern_ = origPat.size() <= 1 ? L"" : origPat.substr(0, origPat.size() - 1);
+    else
+        pattern_ = tok.empty() ? L"" : tok.substr(0, tok.size() - 1);  // ripiego: testo letterale
     preview_.clear();
     trailingSpace_ = (!committed_.empty() && !committed_.back().empty()
                       && committed_.back().back() == L' ');
@@ -229,6 +241,7 @@ void Engine::actDeleteWord(Out& out) {
     } else if (!committed_.empty()) {
         std::wstring tok = committed_.back();
         committed_.pop_back();
+        if (!committedPatterns_.empty()) committedPatterns_.pop_back();
         out.backspace(tok.size());
         trailingSpace_ = (!committed_.empty() && !committed_.back().empty()
                           && committed_.back().back() == L' ');
@@ -239,6 +252,7 @@ void Engine::actFinalizeOnEnter(Out& out) {
     if (punctMode_) { commitPunct(out); }
     else if (!pattern_.empty()) {
         committed_.push_back(displayWord());   // resta nel campo, senza spazio
+        committedPatterns_.push_back(pattern_);
         preview_.clear();
     }
     pattern_.clear(); cands_.clear(); idx_ = 0;
@@ -248,7 +262,7 @@ void Engine::actFinalizeOnEnter(Out& out) {
 
 void Engine::resetComposition() {
     pattern_.clear(); cands_.clear(); idx_ = 0; preview_.clear();
-    committed_.clear(); pending_ = false; hasWord_ = false;
+    committed_.clear(); committedPatterns_.clear(); pending_ = false; hasWord_ = false;
     previewActive_ = false; previewCands_.clear();
     capNext_ = true; trailingSpace_ = false; singleLetter_ = false;
     punctMode_ = false; punctIdx_ = 0; removedSpace_ = false;
