@@ -1,17 +1,19 @@
-// Test del motore senza alcuna dipendenza dal sistema operativo.
+// Test del motore (modello T9) senza dipendenze dal sistema operativo.
 // Simula un campo di testo applicando gli EditEffect prodotti dal motore,
 // esattamente come farebbe un frontend, e verifica il testo risultante.
+//
+// Nel modello T9 ogni pressione e' un TASTO del keymap (una cifra 2..9) che
+// rappresenta un gruppo di lettere; il dizionario disambigua la parola.
 #include "onehand/engine.hpp"
+#include "onehand/predictor.hpp"
 
-#include <cassert>
 #include <cstdio>
 #include <sstream>
 #include <string>
 
-using onehand::Engine;
+using onehand::Action;
 using onehand::Effects;
-using onehand::KeyEvent;
-using onehand::KeyKind;
+using onehand::Engine;
 
 namespace {
 
@@ -22,34 +24,30 @@ int g_failures = 0;
 struct Field {
     Engine       engine;
     std::wstring text;
+    Effects      lastFx;
 
     void apply(const Effects& fx) {
+        lastFx = fx;
         for (const auto& e : fx.edits) {
             for (int i = 0; i < e.backspaces && !text.empty(); ++i) text.pop_back();
             text += e.insert;
         }
     }
-    void key(KeyKind k, wchar_t ch = 0) { apply(engine.onKey({k, ch})); }
-    void action(onehand::Action a, wchar_t ch = 0) { apply(engine.onAction(a, ch)); }
-    void letter(wchar_t ch)             { key(KeyKind::Letter, ch); }
-    void space()                        { key(KeyKind::Space); }
-    void backspace()                    { key(KeyKind::Backspace); }
-    void tab()                          { key(KeyKind::Tab); }
-    void enter()                        { key(KeyKind::Enter); }
-    void timeout()                      { apply(engine.onTimeout()); }
-    void reset()                        { apply(engine.reset()); }
+    void action(Action a, wchar_t key = 0) { apply(engine.onAction(a, key)); }
+    // Digita una sequenza di tasti (es. L"2263"): ogni carattere e' un tasto.
+    void type(const std::wstring& code) { for (wchar_t k : code) action(Action::Letter, k); }
 };
 
-// dizionario minimale in memoria (il core non apre file)
+// Dizionario T9 minimale. Codici (2=abc 3=def 4=ghi 5=jkl 6=mno 7=pqrs 8=tuv 9=wxyz):
+//   cane=2263  band=2263 (COLLISIONE)  casa=2272  sole=7653  a=2
 void loadDict(Field& f) {
     std::istringstream dict(
-        "donna\t100\n"
-        "cosa\t90\n"
+        "cane\t100\n"
+        "band\t90\n"
         "casa\t80\n"
-        "cane\t70\n"
         "sole\t60\n"
         "a\t5000\n");
-    f.engine.setConfig(onehand::Config{});  // default: mano sinistra, jolly = lettere non disponibili
+    f.engine.setConfig(onehand::Config{});   // keymap default: numpad T9
     f.engine.loadWordlist(dict);
 }
 
@@ -64,155 +62,124 @@ void check(const char* name, const std::wstring& got, const std::wstring& want) 
     }
 }
 
-// "donna": d, spazio(jolly per 'o' tramite flush sul tasto successivo),
-// n, n, a, poi spazio x2 per accettare. Maiuscola iniziale a inizio frase.
-void test_donna() {
-    Field f; loadDict(f);
-    f.letter(L'd');
-    f.space();          // diventa jolly quando arriva la lettera dopo
-    f.letter(L'n');
-    f.letter(L'n');
-    f.letter(L'a');
-    f.space(); f.space();   // doppio spazio = accetta + spazio
-    check("donna", f.text, L"Donna ");
+void checkInt(const char* name, int got, int want) {
+    if (got == want) { std::printf("  OK  %s\n", name); }
+    else { std::printf("FAIL  %s: atteso %d, ottenuto %d\n", name, want, got); ++g_failures; }
 }
 
-// "cosa" con jolly confermato dal timeout (spazio singolo isolato).
-void test_cosa_timeout() {
+// Parola + Conferma+spazio + seconda parola + Conferma. Prima parola maiuscola
+// (inizio frase), seconda minuscola. Spazio derivato tra le due.
+void test_word_space_word() {
     Field f; loadDict(f);
-    f.letter(L'c');
-    f.space();          // spazio isolato...
-    f.timeout();        // ...il timer scade -> jolly
-    f.letter(L's');
-    f.letter(L'a');
-    f.space(); f.space();
-    check("cosa-timeout", f.text, L"Cosa ");
+    f.type(L"2263");                 // cane -> "Cane"
+    check("t9-cane", f.text, L"Cane");
+    f.action(Action::ConfirmNewWord); // conferma + nuova parola: spazio derivato
+    check("t9-cane-space", f.text, L"Cane ");
+    f.type(L"7653");                 // sole
+    f.action(Action::Accept);        // conferma
+    check("t9-two-words", f.text, L"Cane sole");
 }
 
-// Maiuscola automatica di una sola lettera a inizio frase ('a' -> 'A').
-void test_single_letter_caps() {
+// Roll cicla le parole in collisione (stesso codice 2263: cane/band).
+void test_roll_collision() {
     Field f; loadDict(f);
-    f.letter(L'a');
-    f.space(); f.space();   // accetta
-    check("single-letter-caps", f.text, L"A ");
+    f.type(L"2263");
+    check("roll-first", f.text, L"Cane");
+    f.action(Action::Rolling);
+    check("roll-second", f.text, L"Band");   // capFirst a inizio frase
 }
 
-// Backspace doppio cancella l'intera parola in corso.
-void test_delete_word() {
+// Cancella-lettera su parola di una sola cella: svuota -> cancella la parola.
+void test_delete_char_empties() {
     Field f; loadDict(f);
-    f.letter(L'c'); f.letter(L'a'); f.letter(L'n'); f.letter(L'e');  // "Cane" in anteprima
-    f.backspace(); f.backspace();   // doppio backspace = cancella parola
-    check("delete-word", f.text, L"");
+    f.type(L"2");                    // 'a' -> "A"
+    check("del-a", f.text, L"A");
+    f.action(Action::DeleteChar);    // toglie l'unica cella -> parola vuota -> cancella parola
+    check("del-empty", f.text, L"");
 }
 
-// reset() ripulisce lo stato (Stop). L'anteprima resta nel campo finche' non
-// la si cancella manualmente, ma il motore riparte pulito.
+// Cancella-parola a cascata: apre sempre la parola a sinistra.
+void test_delete_word_cascade() {
+    Field f; loadDict(f);
+    f.type(L"2263"); f.action(Action::ConfirmNewWord);   // Cane _
+    f.type(L"7653"); f.action(Action::ConfirmNewWord);   // Cane sole _
+    f.type(L"2");                                         // Cane sole a
+    check("cascade-3", f.text, L"Cane sole a");
+    f.action(Action::DeleteWord);                        // via 'a', apre 'sole'
+    check("cascade-2", f.text, L"Cane sole");
+    f.action(Action::DeleteWord);                        // via 'sole', apre 'Cane'
+    check("cascade-1", f.text, L"Cane");
+    f.action(Action::DeleteWord);                        // via 'Cane'
+    check("cascade-0", f.text, L"");
+}
+
+// Accesso casuale: riapre una parola precedente e la ri-rolla (le celle
+// ricordano i tasti, quindi il dizionario torna a proporre alternative).
+void test_random_access_reopen_roll() {
+    Field f; loadDict(f);
+    f.type(L"2263"); f.action(Action::ConfirmNewWord);   // Cane _
+    f.type(L"7653"); f.action(Action::Accept);           // Cane sole
+    check("ra-before", f.text, L"Cane sole");
+    f.action(Action::OpenWordAt, 0);                     // riapre "Cane"
+    checkInt("ra-open-index", f.engine.openIndex(), 0);
+    f.action(Action::Rolling);                           // Roll: cane -> band
+    check("ra-after", f.text, L"Band sole");
+}
+
+// Il predittore riordina i candidati (senza inventarne): band prima di cane.
+struct BandFirstPredictor final : public onehand::Predictor {
+    std::vector<std::wstring> rankCandidates(
+        const onehand::PredictContext&, const std::vector<std::wstring>& c) override {
+        std::vector<std::wstring> out;
+        for (const auto& w : c) if (w == L"band") out.push_back(w);
+        for (const auto& w : c) if (w != L"band") out.push_back(w);
+        return out;
+    }
+};
+
+void test_predictor_reranks() {
+    Field f; loadDict(f);
+    f.engine.setPredictor(std::unique_ptr<onehand::Predictor>(new BandFirstPredictor()));
+    f.type(L"2263");
+    check("rerank", f.text, L"Band");   // band promosso a idx 0
+}
+
+// Diff minimale: aggiungere una lettera non ridigita tutto il prefisso.
+void test_minimal_diff() {
+    Field f; loadDict(f);
+    f.type(L"22");                       // porta il campo a "Aa" (nessun match len2)
+    check("diff-prefix", f.text, L"Aa");
+    f.action(Action::Letter, L'6');      // "226" -> segnaposto "Aam"
+    // l'ultimo effetto deve solo aggiungere 'm' (nessun backspace, insert breve)
+    int totalBs = 0; std::wstring ins;
+    for (const auto& e : f.lastFx.edits) { totalBs += e.backspaces; ins += e.insert; }
+    checkInt("diff-backspaces", totalBs, 0);
+    check("diff-insert", ins, L"m");
+    check("diff-text", f.text, L"Aam");
+}
+
+// reset() ripulisce lo stato del motore.
 void test_reset() {
     Field f; loadDict(f);
-    f.letter(L'c'); f.letter(L'a');
-    f.reset();
-    f.text.clear();             // come se l'utente avesse pulito il campo
-    f.letter(L's'); f.letter(L'o'); f.letter(L'l'); f.letter(L'e');
-    f.space(); f.space();
-    check("reset", f.text, L"Sole ");
-}
-
-// Cancellazione della punteggiatura a due passi: prima lo spazio, poi il segno
-// (ripristinando lo spazio della parola precedente).
-void test_delete_punct_two_steps() {
-    Field f; loadDict(f);
-    f.letter(L'a');
-    f.space(); f.space();       // "A " (accetta la singola lettera)
-    f.tab();                    // apre la punteggiatura: ','
-    f.tab(); f.tab();           // scorre: '.' -> '?'
-    f.space(); f.space();       // accetta il segno -> "A? "
-    check("punct-commit", f.text, L"A? ");
-    f.backspace(); f.timeout(); // backspace singolo (via timeout) -> 1° passo: via lo spazio
-    check("punct-del-space", f.text, L"A?");
-    f.backspace(); f.timeout(); // backspace singolo -> 2° passo: via il segno, torna lo spazio
-    check("punct-del-mark", f.text, L"A ");
-}
-
-// Percorso "azioni" (quello usato dal frontend Windows dopo aver risolto
-// singola/doppia). Verifica che Accept e DeleteWord facciano la loro parte.
-void test_action_accept_and_delete_word() {
-    using onehand::Action;
-    Field f; loadDict(f);
-    f.action(Action::Letter, L'c');
-    f.action(Action::Letter, L'a');
-    f.action(Action::Letter, L'n');
-    f.action(Action::Letter, L'e');       // "Cane" in anteprima
-    f.action(Action::DeleteWord);         // cancella-parola sulla parola in corso
-    check("action-delword-live", f.text, L"");
-
-    f.action(Action::Letter, L'c');
-    f.action(Action::Letter, L'a');
-    f.action(Action::Letter, L'n');
-    f.action(Action::Letter, L'e');
-    f.action(Action::Accept);             // conferma -> "cane "
-    f.action(Action::DeleteWord);         // cancella-parola sulla parola confermata
-    check("action-delword-committed", f.text, L"");
-}
-
-// Cancella-parola con un "?" (carattere jolly) presente nel testo: verifica che
-// non blocchi nulla (caso segnalato dall'utente).
-void test_delword_with_question_mark() {
-    using onehand::Action;
-    Field f; loadDict(f);
-    f.action(Action::Letter, L'c');
-    f.action(Action::Letter, L'a');
-    f.action(Action::Letter, L'n');
-    f.action(Action::Letter, L'e');
-    f.action(Action::Accept);            // "Cane "
-    f.action(Action::Rolling);           // apre punteggiatura -> ","
-    f.action(Action::Rolling);           // "."
-    f.action(Action::Rolling);           // "?"
-    f.action(Action::Accept);            // conferma segno -> "Cane? "
-    f.action(Action::DeleteChar);        // toglie lo spazio -> "Cane?"
-    check("delword-q-delchar", f.text, L"Cane?");
-    f.action(Action::DeleteWord);        // cancella-parola -> toglie "?"
-    check("delword-q-mark", f.text, L"Cane");
-    f.action(Action::DeleteWord);        // cancella-parola -> toglie "Cane"
-    check("delword-q-word", f.text, L"");
-}
-
-// Riapertura di una parola confermata (Backspace singolo): deve mantenere il
-// jolly originale, non il testo letterale (che perde il '?'), altrimenti il
-// dizionario smette di proporre alternative dopo un Backspace su una parola
-// gia' confermata (bug segnalato dall'utente).
-void test_reopen_word_keeps_wildcard() {
-    Field f;
-    std::istringstream dict("cane\t100\ncyne\t90\n");
-    onehand::Config cfg; cfg.wildcardAny = true;   // jolly = qualunque lettera, per semplicita'
-    f.engine.setConfig(cfg);
-    f.engine.loadWordlist(dict);
-
-    f.letter(L'c');
-    f.space(); f.timeout();     // jolly per la seconda lettera
-    f.letter(L'n'); f.letter(L'e');
-    f.space(); f.space();       // conferma -> "Cane " (candidato piu' frequente, maiuscola iniziale)
-    check("reopen-accept", f.text, L"Cane ");
-
-    f.backspace(); f.timeout(); // backspace singolo -> riapre senza l'ultima lettera
-    f.letter(L'e');              // ridigita la 'e': il jolly deve essere ancora li'
-    check("reopen-reprint", f.text, L"cane");
-    f.tab();                     // Rolling: se il jolly e' sopravvissuto, scorre all'alternativa
-    check("reopen-alternative", f.text, L"cyne");
+    f.type(L"2263");
+    f.apply(f.engine.reset());
+    f.text.clear();
+    f.type(L"7653"); f.action(Action::Accept);
+    check("reset", f.text, L"Sole");     // ora e' di nuovo inizio frase -> maiuscola
 }
 
 } // namespace
 
 int main() {
-    std::printf("engine_tests:\n");
-    test_donna();
-    test_cosa_timeout();
-    test_single_letter_caps();
-    test_delete_word();
+    std::printf("engine_tests (T9):\n");
+    test_word_space_word();
+    test_roll_collision();
+    test_delete_char_empties();
+    test_delete_word_cascade();
+    test_random_access_reopen_roll();
+    test_predictor_reranks();
+    test_minimal_diff();
     test_reset();
-    test_delete_punct_two_steps();
-    test_action_accept_and_delete_word();
-    test_delword_with_question_mark();
-    test_reopen_word_keeps_wildcard();
     if (g_failures) { std::printf("%d test FALLITI\n", g_failures); return 1; }
     std::printf("tutti i test OK\n");
     return 0;

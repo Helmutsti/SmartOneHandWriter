@@ -9,6 +9,7 @@ struct OnehandEngine {
     onehand::Engine engine;
     onehand::Effects last;
     onehand::Config  cfg;   // ultima configurazione applicata (per i getter onehand_config_*)
+    std::wstring     renderCache;   // buffer stabile per onehand_render_text
 };
 
 extern "C" {
@@ -18,13 +19,11 @@ void           onehand_destroy(OnehandEngine* e) { delete e; }
 
 void onehand_set_config(OnehandEngine* e, const OnehandConfig* c) {
     if (!e || !c) return;
-    onehand::Config cfg;
-    if (c->available_keys) cfg.availableKeys = c->available_keys;
-    cfg.wildcardAny   = c->wildcard_any != 0;
+    onehand::Config cfg;   // il keymap resta al default T9 (impostabile via JSON)
     cfg.maxCandidates = c->max_candidates;
     cfg.doublePressMs = c->double_press_ms;
-    if (c->punctuation)   cfg.punctuation  = c->punctuation;
     if (c->wordlist_name) cfg.wordlistName = c->wordlist_name;
+    e->cfg = cfg;
     e->engine.setConfig(cfg);
 }
 
@@ -40,9 +39,6 @@ void onehand_apply_config_json(OnehandEngine* e, const char* json) {
     if (!e) return;
     e->cfg = onehand::parseConfig(json ? json : "");
     e->engine.setConfig(e->cfg);
-}
-const wchar_t* onehand_config_available_keys(OnehandEngine* e) {
-    return e ? e->cfg.availableKeys.c_str() : L"";
 }
 const wchar_t* onehand_config_wordlist_name(OnehandEngine* e) {
     return e ? e->cfg.wordlistName.c_str() : L"";
@@ -66,8 +62,21 @@ void onehand_on_action(OnehandEngine* e, int action, wchar_t letter) {
     if (!e) return;
     e->last = e->engine.onAction(static_cast<onehand::Action>(action), letter);
 }
+void onehand_on_action_index(OnehandEngine* e, int action, int index) {
+    if (!e) return;
+    e->last = e->engine.onActionIndex(static_cast<onehand::Action>(action), index);
+}
 void onehand_preview_wildcard(OnehandEngine* e) {
     if (e) e->last = e->engine.previewWildcard();
+}
+
+int onehand_word_count(OnehandEngine* e) { return e ? e->engine.wordCount() : 0; }
+int onehand_open_index(OnehandEngine* e) { return e ? e->engine.openIndex() : -1; }
+int onehand_caret(OnehandEngine* e)      { return e ? e->engine.caret() : 0; }
+const wchar_t* onehand_render_text(OnehandEngine* e) {
+    if (!e) return L"";
+    e->renderCache = e->engine.renderText();
+    return e->renderCache.c_str();
 }
 
 int onehand_edit_count(OnehandEngine* e) {

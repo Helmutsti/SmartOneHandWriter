@@ -4,13 +4,12 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cwctype>
+#include <set>
 
 namespace onehand {
 
-void Dictionary::load(std::istream& f, const std::wstring& available, bool wildcardAny) {
+void Dictionary::load(std::istream& f) {
     words_.clear();
-    wildSet_.clear();
-    wildAny_ = wildcardAny;
 
     std::vector<std::string> lines;
     std::string line;
@@ -43,33 +42,21 @@ void Dictionary::load(std::istream& f, const std::wstring& available, bool wildc
         words_.push_back({w, freq});
         ++rank;
     }
-
-    // insieme dei caratteri che un jolly puo' rappresentare
-    if (!wildAny_ && !available.empty()) {
-        std::set<wchar_t> avail(available.begin(), available.end());
-        std::set<wchar_t> alpha;
-        for (auto& e : words_) for (wchar_t c : e.w) alpha.insert(c);
-        for (wchar_t c : alpha) if (!avail.count(c)) wildSet_.insert(c);
-    } else {
-        wildAny_ = true;
-    }
 }
 
-std::vector<std::wstring> Dictionary::computeCandidates(const std::wstring& pat, int maxCand) const {
+std::vector<std::wstring> Dictionary::computeCandidates(
+    const std::vector<std::vector<wchar_t>>& groups, int maxCand) const {
     std::vector<std::wstring> out;
-    if (pat.empty()) return out;
-    if (pat.find(L'?') == std::wstring::npos) { out.push_back(pat); return out; }
+    if (groups.empty()) return out;
 
-    const std::size_t n = pat.size();
+    const std::size_t n = groups.size();
     std::vector<std::pair<std::wstring, double>> m;
     for (auto& e : words_) {
         if (e.w.size() != n) continue;
         bool ok = true;
         for (std::size_t i = 0; i < n; ++i) {
-            wchar_t pc = pat[i], wc = e.w[i];
-            if (pc == L'?') {
-                if (!wildAny_ && !wildSet_.count(wc)) { ok = false; break; }
-            } else if (pc != wc) { ok = false; break; }
+            const std::vector<wchar_t>& g = groups[i];
+            if (std::find(g.begin(), g.end(), e.w[i]) == g.end()) { ok = false; break; }
         }
         if (ok) m.push_back({e.w, e.f});
     }
@@ -84,7 +71,6 @@ std::vector<std::wstring> Dictionary::computeCandidates(const std::wstring& pat,
         out.push_back(p.first);
         if (static_cast<int>(out.size()) >= maxCand) break;
     }
-    if (out.empty()) out.push_back(pat);
     return out;
 }
 

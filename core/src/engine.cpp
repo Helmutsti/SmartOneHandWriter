@@ -1,38 +1,19 @@
+// OneHand core - motore di composizione, modello T9.
+//
+// Tutto ruota attorno alla singola Parola. Ogni pressione di tasto aggiunge una
+// Cella (il tasto premuto = un gruppo di lettere); il dizionario disambigua e il
+// Roll cicla le collisioni. Gli spazi non esistono come dato: sono derivati al
+// render, che unisce le parole con un separatore. Il motore possiede il testo
+// canonico ed emette il diff minimo (prefisso comune) verso il campo con focus.
 #include "onehand/engine.hpp"
 #include "dictionary.hpp"
+#include "alterations.hpp"
 
-#include <cwctype>
+#include <algorithm>
 
 namespace onehand {
 
-namespace {
-// Varianti accentate proponibili quando lo scheletro e' una sola lettera (IT).
-// towupper/towlower non maiuscolizzano gli accentati sotto la locale "C", quindi
-// le coppie minuscola/maiuscola sono elencate esplicitamente.
-struct AccentPair { wchar_t lo; wchar_t up; };
-
-const std::vector<AccentPair>& accentsFor(wchar_t base) {
-    static const std::vector<AccentPair> a = { {L'à', L'À'} };
-    static const std::vector<AccentPair> e = { {L'è', L'È'}, {L'é', L'É'} };
-    static const std::vector<AccentPair> i = { {L'ì', L'Ì'} };
-    static const std::vector<AccentPair> o = { {L'ò', L'Ò'} };
-    static const std::vector<AccentPair> u = { {L'ù', L'Ù'} };
-    static const std::vector<AccentPair> none;
-    switch (base) {
-        case L'a': return a;
-        case L'e': return e;
-        case L'i': return i;
-        case L'o': return o;
-        case L'u': return u;
-        default:   return none;
-    }
-}
-} // namespace
-
 // ------------------------------------------------------------------ Out
-// Accumula la sequenza minima di EditEffect. Finche' si fanno cancellazioni e
-// poi inserimenti, resta un'unica coppia; se un backspace arriva dopo un
-// insert (interleaving), apre una nuova coppia.
 void Engine::Out::backspace(std::size_t n) {
     if (n == 0) return;
     if (edits.empty() || !edits.back().insert.empty()) edits.push_back({});
@@ -46,267 +27,219 @@ void Engine::Out::insert(const std::wstring& s) {
 }
 
 // ------------------------------------------------------------------ ciclo di vita
-Engine::Engine() : dict_(new Dictionary()) {}
+Engine::Engine() : dict_(new Dictionary()), predictor_(makeFrequencyPredictor()) {}
 Engine::~Engine() = default;
 
 void Engine::setConfig(const Config& cfg) { cfg_ = cfg; }
-
-void Engine::loadWordlist(std::istream& in) {
-    dict_->load(in, cfg_.availableKeys, cfg_.wildcardAny);
+void Engine::loadWordlist(std::istream& in) { dict_->load(in); }
+void Engine::setPredictor(std::unique_ptr<Predictor> p) {
+    if (p) predictor_ = std::move(p);
 }
 
-// ------------------------------------------------------------------ motore
-std::wstring Engine::currentWord() const {
-    if (pattern_.empty()) return L"";
-    if (!cands_.empty()) return cands_[idx_];
-    return pattern_;
-}
+// ------------------------------------------------------------------ helper
+std::vector<wchar_t> Engine::groupFor(wchar_t key) const { return cfg_.keymap.groupOf(key); }
 
-void Engine::recompute() {
-    cands_ = dict_->computeCandidates(pattern_, cfg_.maxCandidates);
-    idx_ = 0;
-    singleLetter_ = (!pattern_.empty() &&
-                     pattern_.find(L'?') == std::wstring::npos &&
-                     pattern_.size() == 1);
-    if (singleLetter_) {
-        // su una sola lettera proponi anche la maiuscola
-        wchar_t lo = pattern_[0];
-        wchar_t up = static_cast<wchar_t>(towupper(lo));
-        cands_.clear();
-        cands_.push_back(std::wstring(1, lo));
-        if (up != lo) cands_.push_back(std::wstring(1, up));
-        for (const auto& acc : accentsFor(lo)) {
-            cands_.push_back(std::wstring(1, acc.lo));
-            cands_.push_back(std::wstring(1, acc.up));
-        }
-        idx_ = (capNext_ && up != lo) ? 1 : 0;  // a inizio frase, default maiuscola
+PredictContext Engine::buildContext() const {
+    PredictContext ctx;
+    const int n = static_cast<int>(doc_.words.size());
+    const int o = (openIndex_ >= 0) ? openIndex_ : n;
+    for (int i = 0; i < n; ++i) {
+        if (i == openIndex_) continue;
+        if (i < o) ctx.leftWords.push_back(displayOf(doc_.words[i]));
+        else       ctx.rightWords.push_back(displayOf(doc_.words[i]));
     }
-    hasWord_ = !pattern_.empty();
+    ctx.sentenceStart = sentenceStart_ && (openIndex_ <= 0);
+    return ctx;
 }
 
-std::wstring Engine::displayWord() const {
-    if (pattern_.empty()) return L"";
-    std::wstring w = currentWord();
-    if (!singleLetter_ && capNext_ && !w.empty()) w[0] = static_cast<wchar_t>(towupper(w[0]));
-    return w;
-}
+// Ricostruisce i candidati della parola aperta dai tasti delle sue celle, li
+// riordina col predittore e appende le alterazioni (case/accento) della parola
+// reale selezionata, in coda alle reali.
+void Engine::recompute(Word& w) {
+    std::vector<std::vector<wchar_t>> groups;
+    groups.reserve(w.cells.size());
+    for (const Cell& c : w.cells) groups.push_back(groupFor(c.key));
 
-// ridisegna l'anteprima: diff tra il vecchio preview e quello nuovo
-void Engine::render(Out& out) {
-    std::wstring cur = punctMode_ ? std::wstring(1, cfg_.punctuation[punctIdx_]) : displayWord();
-    if (cur != preview_) {
-        out.backspace(preview_.size());
-        out.insert(cur);
-        preview_ = cur;
+    std::vector<std::wstring> base = dict_->computeCandidates(groups, cfg_.maxCandidates);
+    base = predictor_->rankCandidates(buildContext(), base);
+    if (base.empty()) {
+        std::wstring ph;                      // nessun match: segnaposto = prima lettera di ogni gruppo
+        for (const Cell& c : w.cells) { auto g = groupFor(c.key); ph.push_back(g.empty() ? c.key : g[0]); }
+        base.push_back(ph);
     }
+
+    w.cands = base;
+    w.realCount = static_cast<int>(base.size());
+    w.idx = 0;
+    for (const std::wstring& a : alterationsOf(base[0]))
+        if (std::find(w.cands.begin(), w.cands.end(), a) == w.cands.end())
+            w.cands.push_back(a);
+    syncGlyphs(w);
 }
 
-// ------------------------------------------------------------------ punteggiatura
-void Engine::enterPunctMode(Out& out) {
-    if (cfg_.punctuation.empty()) return;
-    punctMode_ = true;
-    punctIdx_ = 0;
-    // attacca il segno alla parola precedente: togli lo spazio finale
-    if (trailingSpace_) { out.backspace(1); removedSpace_ = true; trailingSpace_ = false; }
-    else removedSpace_ = false;
-    preview_.clear();
-    hasWord_ = true;
-    render(out);
+void Engine::syncGlyphs(Word& w) const {
+    const std::wstring& sel = (w.idx >= 0 && w.idx < static_cast<int>(w.cands.size()))
+                                  ? w.cands[w.idx] : std::wstring();
+    for (std::size_t i = 0; i < w.cells.size(); ++i)
+        w.cells[i].glyph = (i < sel.size()) ? sel[i] : w.cells[i].key;
 }
 
-void Engine::cyclePunct(Out& out) {
-    punctIdx_ = (punctIdx_ + 1) % static_cast<int>(cfg_.punctuation.size());
-    render(out);
+std::wstring Engine::displayOf(const Word& w) const {
+    std::wstring s;
+    if (w.idx >= 0 && w.idx < static_cast<int>(w.cands.size())) {
+        s = w.cands[w.idx];
+    } else {
+        for (const Cell& c : w.cells) { auto g = groupFor(c.key); s.push_back(g.empty() ? c.key : g[0]); }
+    }
+    if (w.capFirst) s = capitalizeFirst(s);
+    return s;
 }
 
-void Engine::cancelPunct(Out& out) {
-    out.backspace(preview_.size());
-    preview_.clear();
-    if (removedSpace_) { out.insert(L" "); trailingSpace_ = true; }
-    removedSpace_ = false;
-    punctMode_ = false;
-    hasWord_ = false;
+// Testo dell'intero documento con gli spazi derivati; opzionalmente riporta la
+// posizione del caret (coda della parola aperta, o fine testo).
+std::wstring Engine::renderWithCaret(int* caretOut) const {
+    std::wstring t;
+    int caret = 0;
+    for (std::size_t i = 0; i < doc_.words.size(); ++i) {
+        if (i) t += L" ";                                   // separatore derivato (Text|Text)
+        std::wstring d = displayOf(doc_.words[i]);
+        if (static_cast<int>(i) == openIndex_) caret = static_cast<int>(t.size() + d.size());
+        t += d;
+    }
+    if (openIndex_ < 0) caret = static_cast<int>(t.size());
+    if (caretOut) *caretOut = caret;
+    return t;
 }
 
-void Engine::commitPunct(Out& out) {
-    wchar_t p = cfg_.punctuation[punctIdx_];
-    out.insert(L" ");                        // spazio spostato dopo il segno
-    if (removedSpace_ && !committed_.empty() && !committed_.back().empty()
-        && committed_.back().back() == L' ')
-        committed_.back().pop_back();         // la parola prima ha perso lo spazio
-    committed_.push_back(std::wstring(1, p) + L" ");
-    committedPatterns_.push_back(L"");   // punteggiatura: nessuno scheletro da riaprire
-    preview_.clear();
-    punctMode_ = false; removedSpace_ = false; trailingSpace_ = true;
-    if (p == L'.' || p == L'!' || p == L'?') capNext_ = true;  // maiuscola dopo il punto
-    hasWord_ = false;
+std::wstring Engine::renderText() const { return renderWithCaret(nullptr); }
+int          Engine::caret() const { int c = 0; renderWithCaret(&c); return c; }
+
+void Engine::emit(Out& out) {
+    std::wstring cur = renderWithCaret(nullptr);
+    std::size_t p = 0;
+    const std::size_t lim = std::min(lastRender_.size(), cur.size());
+    while (p < lim && lastRender_[p] == cur[p]) ++p;
+    out.backspace(lastRender_.size() - p);
+    out.insert(cur.substr(p));
+    lastRender_ = cur;
+}
+
+bool Engine::hasWord() const {
+    return openIndex_ >= 0 && !doc_.words[openIndex_].cells.empty();
+}
+
+// ------------------------------------------------------------------ struttura documento
+void Engine::ensureOpenAtTail() {
+    if (openIndex_ >= 0) return;
+    Word w;
+    w.capFirst = sentenceStart_;
+    doc_.words.push_back(w);
+    openIndex_ = static_cast<int>(doc_.words.size()) - 1;
+}
+
+int Engine::resolveCurrent() {
+    if (openIndex_ < 0) return -1;
+    int erased = -1;
+    Word& w = doc_.words[openIndex_];
+    if (w.cells.empty()) {
+        erased = openIndex_;
+        doc_.words.erase(doc_.words.begin() + openIndex_);
+    } else {
+        w.state = WordState::Resolved;
+    }
+    openIndex_ = -1;
+    return erased;
+}
+
+void Engine::gotoWord(int target) {
+    int erased = resolveCurrent();
+    if (erased >= 0 && erased < target) --target;   // la rimozione ha spostato il target
+    if (target < 0 || target >= static_cast<int>(doc_.words.size())) return;  // niente da aprire
+    openIndex_ = target;
+    Word& w = doc_.words[target];
+    w.state = WordState::Open;
+    if (w.cands.empty()) recompute(w);
 }
 
 // ------------------------------------------------------------------ azioni
-void Engine::actLiteral(Out& out, wchar_t ch) {
-    if (punctMode_) cancelPunct(out);
-    pattern_.push_back(ch); recompute(); render(out);
+void Engine::actLetter(wchar_t key) {
+    ensureOpenAtTail();
+    Word& w = doc_.words[openIndex_];
+    w.cells.push_back({key, 0});
+    recompute(w);
 }
 
-void Engine::actWildcard(Out& out) {
-    if (punctMode_) return;
-    pattern_.push_back(L'?'); recompute(); render(out);
-}
-
-void Engine::actTab(Out& out) {
-    if (punctMode_) { cyclePunct(out); return; }
-    if (!pattern_.empty()) {
-        if (!cands_.empty()) { idx_ = (idx_ + 1) % static_cast<int>(cands_.size()); render(out); }
-        return;
+void Engine::actRoll() {
+    if (openIndex_ < 0) return;
+    Word& w = doc_.words[openIndex_];
+    if (w.cands.size() <= 1) return;
+    w.idx = (w.idx + 1) % static_cast<int>(w.cands.size());
+    // se la selezione e' su una parola reale, rigenera le alterazioni perche' la
+    // seguano (regola: le alterazioni seguono la reale a idx 0 o quella rollata).
+    if (w.idx < w.realCount) {
+        std::vector<std::wstring> reals(w.cands.begin(), w.cands.begin() + w.realCount);
+        w.cands = reals;
+        for (const std::wstring& a : alterationsOf(reals[w.idx]))
+            if (std::find(w.cands.begin(), w.cands.end(), a) == w.cands.end())
+                w.cands.push_back(a);
     }
-    enterPunctMode(out);                      // a inizio parola: scegli punteggiatura
+    syncGlyphs(w);
 }
 
-void Engine::actAccept(Out& out) {
-    if (punctMode_) { commitPunct(out); return; }
-    if (pattern_.empty()) return;
-    std::wstring disp = displayWord();
-    out.insert(L" ");
-    committed_.push_back(disp + L" ");
-    committedPatterns_.push_back(pattern_);
-    pattern_.clear(); cands_.clear(); idx_ = 0; preview_.clear();
-    singleLetter_ = false; trailingSpace_ = true; capNext_ = false;
-    hasWord_ = false;
+void Engine::actConfirm() {
+    if (openIndex_ < 0) return;
+    resolveCurrent();
+    sentenceStart_ = false;
 }
 
-void Engine::actDeleteChar(Out& out) {
-    if (punctMode_) { cancelPunct(out); return; }
-    if (!pattern_.empty()) {
-        pattern_.pop_back();
-        recompute(); render(out);
-        return;
+void Engine::actConfirmNewWord() {
+    actConfirm();
+    ensureOpenAtTail();   // apre una nuova parola vuota a destra (spazio derivato)
+}
+
+void Engine::actDeleteChar() {
+    if (openIndex_ < 0) {
+        if (doc_.words.empty()) return;
+        openIndex_ = static_cast<int>(doc_.words.size()) - 1;   // riapre l'ultima
+        Word& lw = doc_.words[openIndex_];
+        lw.state = WordState::Open;
+        if (lw.cands.empty()) recompute(lw);
     }
-    if (committed_.empty()) return;
+    Word& w = doc_.words[openIndex_];
+    if (w.cells.empty()) { actDeleteWord(); return; }
+    w.cells.pop_back();
+    if (w.cells.empty()) { actDeleteWord(); return; }
+    recompute(w);
+}
 
-    // token di punteggiatura ("segno " oppure "segno"): cancellazione a due passi,
-    // cosi' il Backspace toglie prima lo spazio e solo dopo il segno (come per le parole).
-    std::wstring& back = committed_.back();
-    if (!back.empty() && cfg_.punctuation.find(back[0]) != std::wstring::npos) {
-        if (back.size() >= 2 && back.back() == L' ') {
-            out.backspace(1);          // 1° passo: via solo lo spazio finale
-            back.pop_back();           // "? " -> "?"
-            trailingSpace_ = false;
-        } else {
-            out.backspace(back.size());  // 2° passo: via il segno...
-            committed_.pop_back();
-            if (!committedPatterns_.empty()) committedPatterns_.pop_back();
-            if (!committed_.empty() && !committed_.back().empty()
-                && committed_.back().back() != L' ') {
-                committed_.back().push_back(L' ');   // ...e ripristina lo spazio della parola prima
-                out.insert(L" ");
-                trailingSpace_ = true;
-            } else {
-                trailingSpace_ = (!committed_.empty() && !committed_.back().empty()
-                                  && committed_.back().back() == L' ');
-            }
-            capNext_ = false;          // rimosso il segno: non è più inizio frase
-        }
-        preview_.clear();
-        hasWord_ = false;
-        return;
+void Engine::actDeleteWord() {
+    int target = (openIndex_ >= 0) ? openIndex_ : static_cast<int>(doc_.words.size()) - 1;
+    if (target < 0) return;
+    doc_.words.erase(doc_.words.begin() + target);
+    int left = target - 1;
+    if (left >= 0) {
+        openIndex_ = left;
+        Word& w = doc_.words[left];
+        w.state = WordState::Open;
+        if (w.cands.empty()) recompute(w);
+    } else {
+        openIndex_ = -1;
     }
-
-    // token di parola: riapri la parola meno l'ultimo carattere. Usa lo scheletro
-    // originale (jolly '?' compresi), non il testo visualizzato: senza '?' il
-    // dizionario non cerca piu' alternative (computeCandidates le propone solo in
-    // presenza di un jolly), quindi ripartire dal testo letterale perdeva le
-    // proposte del dizionario per una parola gia' confermata.
-    std::wstring tok = back;
-    std::wstring origPat = committedPatterns_.empty() ? L"" : committedPatterns_.back();
-    committed_.pop_back();
-    if (!committedPatterns_.empty()) committedPatterns_.pop_back();
-    out.backspace(tok.size());                 // rimuovi tutto il token
-    if (!tok.empty() && tok.back() == L' ') tok.pop_back();
-    if (!origPat.empty())
-        pattern_ = origPat.size() <= 1 ? L"" : origPat.substr(0, origPat.size() - 1);
-    else
-        pattern_ = tok.empty() ? L"" : tok.substr(0, tok.size() - 1);  // ripiego: testo letterale
-    preview_.clear();
-    trailingSpace_ = (!committed_.empty() && !committed_.back().empty()
-                      && committed_.back().back() == L' ');
-    recompute(); render(out);
-}
-
-void Engine::actDeleteWord(Out& out) {
-    if (punctMode_) { cancelPunct(out); return; }
-    if (!pattern_.empty()) {
-        out.backspace(preview_.size());
-        pattern_.clear(); cands_.clear(); idx_ = 0; preview_.clear();
-        singleLetter_ = false; hasWord_ = false;
-    } else if (!committed_.empty()) {
-        std::wstring tok = committed_.back();
-        committed_.pop_back();
-        if (!committedPatterns_.empty()) committedPatterns_.pop_back();
-        out.backspace(tok.size());
-        trailingSpace_ = (!committed_.empty() && !committed_.back().empty()
-                          && committed_.back().back() == L' ');
-    }
-}
-
-void Engine::actFinalizeOnEnter(Out& out) {
-    if (punctMode_) { commitPunct(out); }
-    else if (!pattern_.empty()) {
-        committed_.push_back(displayWord());   // resta nel campo, senza spazio
-        committedPatterns_.push_back(pattern_);
-        preview_.clear();
-    }
-    pattern_.clear(); cands_.clear(); idx_ = 0;
-    singleLetter_ = false; trailingSpace_ = false; capNext_ = true;  // nuova riga
-    hasWord_ = false;
-}
-
-void Engine::resetComposition() {
-    pattern_.clear(); cands_.clear(); idx_ = 0; preview_.clear();
-    committed_.clear(); committedPatterns_.clear(); pending_ = false; hasWord_ = false;
-    previewActive_ = false; previewCands_.clear();
-    capNext_ = true; trailingSpace_ = false; singleLetter_ = false;
-    punctMode_ = false; punctIdx_ = 0; removedSpace_ = false;
-}
-
-// ------------------------------------------------------------------ doppia pressione
-void Engine::doSingle(Out& out, KeyKind k) {
-    if (k == KeyKind::Space) actWildcard(out);
-    else if (k == KeyKind::Backspace) actDeleteChar(out);
-}
-
-void Engine::doDouble(Out& out, KeyKind k) {
-    if (k == KeyKind::Space) actAccept(out);
-    else if (k == KeyKind::Backspace) actDeleteWord(out);
 }
 
 // ------------------------------------------------------------------ popup
 PopupEffect Engine::buildPopup() const {
     PopupEffect p;
-
-    // tavolozza punteggiatura (ha la precedenza)
-    if (punctMode_) {
-        std::wstring t;
-        for (int i = 0; i < static_cast<int>(cfg_.punctuation.size()); ++i) {
-            if (i) t += L"  ";
-            if (i == punctIdx_) { t += L"["; t += cfg_.punctuation[i]; t += L"]"; }
-            else t += cfg_.punctuation[i];
-        }
-        p.visible = true;
-        p.text = t;
-        return p;
-    }
-
-    // mentre lo spazio (jolly) e' in attesa del doppio-tap, mostra in anteprima
-    // i candidati che si otterrebbero col jolly; altrimenti le alternative reali.
-    const std::vector<std::wstring>& list = previewActive_ ? previewCands_ : cands_;
-    const int sel = previewActive_ ? 0 : idx_;
-    if (list.size() <= 1) { p.visible = false; return p; }
-
+    if (openIndex_ < 0) return p;
+    const Word& w = doc_.words[openIndex_];
+    if (w.cands.size() <= 1) return p;
     std::wstring t;
-    for (int i = 0; i < static_cast<int>(list.size()); ++i) {
+    for (int i = 0; i < static_cast<int>(w.cands.size()); ++i) {
         if (i) t += L"   ";
-        if (i == sel) { t += L"["; t += list[i]; t += L"]"; }
-        else t += list[i];
+        std::wstring c = w.cands[i];
+        if (w.capFirst) c = capitalizeFirst(c);
+        if (i == w.idx) { t += L"["; t += c; t += L"]"; }
+        else t += c;
     }
     p.visible = true;
     p.text = t;
@@ -314,98 +247,76 @@ PopupEffect Engine::buildPopup() const {
 }
 
 // ------------------------------------------------------------------ ingressi pubblici
-Effects Engine::onKey(const KeyEvent& key) {
+Effects Engine::onActionIndex(Action a, int index) {
     Out out;
     Effects fx;
-    previewActive_ = false;   // l'anteprima vale solo finche' lo spazio resta in attesa
 
-    if (key.kind == KeyKind::Space || key.kind == KeyKind::Backspace) {
-        if (pending_ && pendingKey_ == key.kind) {       // seconda pressione -> DOPPIA
-            pending_ = false;
-            fx.timer.action = TimerEffect::Action::Cancel;
-            doDouble(out, key.kind);
-        } else {                                         // prima pressione -> attende
-            if (pending_) doSingle(out, pendingKey_);     // un altro tasto era in attesa: risolvilo
-            pending_ = true;
-            pendingKey_ = key.kind;
-            fx.timer.action = TimerEffect::Action::Start; // Start = riavvia (il frontend kill+set)
-            fx.timer.ms = cfg_.doublePressMs;
-            // anteprima: i candidati del jolly, senza ancora applicarlo allo scheletro
-            if (key.kind == KeyKind::Space && !pattern_.empty()) {
-                previewCands_ = dict_->computeCandidates(pattern_ + L'?', cfg_.maxCandidates);
-                previewActive_ = true;
-            }
-        }
-    } else {
-        if (pending_) {
-            doSingle(out, pendingKey_);
-            pending_ = false;
-            fx.timer.action = TimerEffect::Action::Cancel;
-        }
-        switch (key.kind) {
-            case KeyKind::Tab:    actTab(out); break;
-            case KeyKind::Enter:  actFinalizeOnEnter(out); fx.passThrough = true; break;
-            case KeyKind::Letter: actLiteral(out, key.letter); break;
-            default: break;
-        }
+    if (a == Action::Finalize) {
+        resolveCurrent();
+        doc_.words.clear();
+        openIndex_ = -1;
+        sentenceStart_ = true;
+        lastRender_.clear();          // il campo va a capo: la nostra riga riparte da zero
+        fx.passThrough = true;
+        fx.popup = buildPopup();
+        return fx;
     }
 
-    fx.edits = std::move(out.edits);
-    fx.popup = buildPopup();
-    popupText_ = fx.popup.text;
-    return fx;
-}
-
-Effects Engine::onTimeout() {
-    Out out;
-    Effects fx;
-    previewActive_ = false;   // il jolly viene applicato qui: tornano i candidati reali
-    if (pending_) {
-        KeyKind k = pendingKey_;
-        pending_ = false;
-        doSingle(out, k);
-    }
-    fx.edits = std::move(out.edits);
-    fx.popup = buildPopup();
-    popupText_ = fx.popup.text;
-    // il timer e' gia' scaduto: nessuna azione sul timer
-    return fx;
-}
-
-// Percorso esplicito: esegue un'azione gia' risolta dal frontend. Nessun timer
-// qui (il frontend possiede il timing del doppio-tap).
-Effects Engine::onAction(Action a, wchar_t letter) {
-    Out out;
-    Effects fx;
-    previewActive_ = false;   // l'azione risolve l'eventuale attesa: via l'anteprima
     switch (a) {
-        case Action::Wildcard:   actWildcard(out); break;
-        case Action::Accept:     actAccept(out); break;
-        case Action::Rolling:    actTab(out); break;
-        case Action::DeleteChar: actDeleteChar(out); break;
-        case Action::DeleteWord: actDeleteWord(out); break;
-        case Action::Finalize:   actFinalizeOnEnter(out); fx.passThrough = true; break;
-        case Action::Letter:     actLiteral(out, letter); break;
+        case Action::Letter:         actLetter(static_cast<wchar_t>(index)); break;
+        case Action::Wildcard:       break;   // deprecato: no-op
+        case Action::Accept:         actConfirm(); break;
+        case Action::Rolling:        actRoll(); break;
+        case Action::DeleteChar:     actDeleteChar(); break;
+        case Action::DeleteWord:     actDeleteWord(); break;
+        case Action::ConfirmNewWord: actConfirmNewWord(); break;
+        case Action::OpenPrevWord: {
+            int base = (openIndex_ >= 0) ? openIndex_ : static_cast<int>(doc_.words.size());
+            gotoWord(base - 1);
+            break;
+        }
+        case Action::OpenNextWord:
+            if (openIndex_ >= 0) gotoWord(openIndex_ + 1);
+            break;
+        case Action::OpenWordAt:     gotoWord(index); break;
+        default: break;
     }
+
+    emit(out);
     fx.edits = std::move(out.edits);
     fx.popup = buildPopup();
-    popupText_ = fx.popup.text;
     return fx;
 }
 
-Effects Engine::previewWildcard() {
-    Effects fx;
-    if (!pattern_.empty()) {
-        previewCands_ = dict_->computeCandidates(pattern_ + L'?', cfg_.maxCandidates);
-        previewActive_ = true;
+Effects Engine::onAction(Action a, wchar_t letter) {
+    // Per Letter, 'letter' e' il TASTO premuto (chiave del keymap).
+    return onActionIndex(a, static_cast<int>(letter));
+}
+
+Effects Engine::onKey(const KeyEvent& key) {
+    switch (key.kind) {
+        case KeyKind::Letter:    return onAction(Action::Letter, key.letter);
+        case KeyKind::Space:     return onAction(Action::ConfirmNewWord);
+        case KeyKind::Backspace: return onAction(Action::DeleteChar);
+        case KeyKind::Tab:       return onAction(Action::Rolling);
+        case KeyKind::Enter:     return onAction(Action::Finalize);
     }
+    return Effects{};
+}
+
+Effects Engine::onTimeout() { return Effects{}; }   // nessun doppio-tap nel modello T9
+
+Effects Engine::previewWildcard() {                 // deprecato
+    Effects fx;
     fx.popup = buildPopup();
-    popupText_ = fx.popup.text;
     return fx;
 }
 
 Effects Engine::reset() {
-    resetComposition();
+    doc_.words.clear();
+    openIndex_ = -1;
+    lastRender_.clear();
+    sentenceStart_ = true;
     Effects fx;
     fx.popup.visible = false;
     fx.timer.action = TimerEffect::Action::Cancel;
