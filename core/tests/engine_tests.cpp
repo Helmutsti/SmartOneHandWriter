@@ -30,6 +30,7 @@ struct Field {
         }
     }
     void key(KeyKind k, wchar_t ch = 0) { apply(engine.onKey({k, ch})); }
+    void action(onehand::Action a, wchar_t ch = 0) { apply(engine.onAction(a, ch)); }
     void letter(wchar_t ch)             { key(KeyKind::Letter, ch); }
     void space()                        { key(KeyKind::Space); }
     void backspace()                    { key(KeyKind::Backspace); }
@@ -116,6 +117,65 @@ void test_reset() {
     check("reset", f.text, L"Sole ");
 }
 
+// Cancellazione della punteggiatura a due passi: prima lo spazio, poi il segno
+// (ripristinando lo spazio della parola precedente).
+void test_delete_punct_two_steps() {
+    Field f; loadDict(f);
+    f.letter(L'a');
+    f.space(); f.space();       // "A " (accetta la singola lettera)
+    f.tab();                    // apre la punteggiatura: ','
+    f.tab(); f.tab();           // scorre: '.' -> '?'
+    f.space(); f.space();       // accetta il segno -> "A? "
+    check("punct-commit", f.text, L"A? ");
+    f.backspace(); f.timeout(); // backspace singolo (via timeout) -> 1° passo: via lo spazio
+    check("punct-del-space", f.text, L"A?");
+    f.backspace(); f.timeout(); // backspace singolo -> 2° passo: via il segno, torna lo spazio
+    check("punct-del-mark", f.text, L"A ");
+}
+
+// Percorso "azioni" (quello usato dal frontend Windows dopo aver risolto
+// singola/doppia). Verifica che Accept e DeleteWord facciano la loro parte.
+void test_action_accept_and_delete_word() {
+    using onehand::Action;
+    Field f; loadDict(f);
+    f.action(Action::Letter, L'c');
+    f.action(Action::Letter, L'a');
+    f.action(Action::Letter, L'n');
+    f.action(Action::Letter, L'e');       // "Cane" in anteprima
+    f.action(Action::DeleteWord);         // cancella-parola sulla parola in corso
+    check("action-delword-live", f.text, L"");
+
+    f.action(Action::Letter, L'c');
+    f.action(Action::Letter, L'a');
+    f.action(Action::Letter, L'n');
+    f.action(Action::Letter, L'e');
+    f.action(Action::Accept);             // conferma -> "cane "
+    f.action(Action::DeleteWord);         // cancella-parola sulla parola confermata
+    check("action-delword-committed", f.text, L"");
+}
+
+// Cancella-parola con un "?" (carattere jolly) presente nel testo: verifica che
+// non blocchi nulla (caso segnalato dall'utente).
+void test_delword_with_question_mark() {
+    using onehand::Action;
+    Field f; loadDict(f);
+    f.action(Action::Letter, L'c');
+    f.action(Action::Letter, L'a');
+    f.action(Action::Letter, L'n');
+    f.action(Action::Letter, L'e');
+    f.action(Action::Accept);            // "Cane "
+    f.action(Action::Rolling);           // apre punteggiatura -> ","
+    f.action(Action::Rolling);           // "."
+    f.action(Action::Rolling);           // "?"
+    f.action(Action::Accept);            // conferma segno -> "Cane? "
+    f.action(Action::DeleteChar);        // toglie lo spazio -> "Cane?"
+    check("delword-q-delchar", f.text, L"Cane?");
+    f.action(Action::DeleteWord);        // cancella-parola -> toglie "?"
+    check("delword-q-mark", f.text, L"Cane");
+    f.action(Action::DeleteWord);        // cancella-parola -> toglie "Cane"
+    check("delword-q-word", f.text, L"");
+}
+
 } // namespace
 
 int main() {
@@ -125,6 +185,9 @@ int main() {
     test_single_letter_caps();
     test_delete_word();
     test_reset();
+    test_delete_punct_two_steps();
+    test_action_accept_and_delete_word();
+    test_delword_with_question_mark();
     if (g_failures) { std::printf("%d test FALLITI\n", g_failures); return 1; }
     std::printf("tutti i test OK\n");
     return 0;

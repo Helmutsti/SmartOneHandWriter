@@ -25,6 +25,20 @@ struct KeyEvent {
     wchar_t letter = 0;   // valido solo se kind == Letter
 };
 
+// Azione di composizione gia' risolta. Il frontend decide quale tasto fisico la
+// attiva e se serve pressione singola o doppia; il motore la esegue e basta
+// (Engine::onAction). E' l'alternativa "esplicita" a onKey(), utile ai frontend
+// che vogliono possedere il timing del doppio-tap.
+enum class Action {
+    Letter,       // usa 'letter'
+    Wildcard,     // inserisce il jolly '?'
+    Accept,       // conferma la parola corrente
+    Rolling,      // scorre le alternative / apre la punteggiatura
+    DeleteChar,   // cancella una lettera
+    DeleteWord,   // cancella la parola
+    Finalize,     // finalizza (imposta passThrough)
+};
+
 // ------------------------------------------------------------------ effetti
 // Modifica al campo di testo con focus: prima 'backspaces' cancellazioni, poi
 // l'inserimento di 'insert'. Una sequenza di EditEffect rappresenta anche le

@@ -32,6 +32,13 @@ public:
     Effects onTimeout();                  // scadenza del timer doppio-tap
     Effects reset();                      // su Play/Stop: azzera la composizione
 
+    // Percorso "esplicito": il frontend risolve tasto+singola/doppia e chiede una
+    // singola azione; il motore non gestisce alcun timer (lo fa il frontend).
+    Effects onAction(Action a, wchar_t letter = 0);
+    // Anteprima dei candidati col jolly, senza applicarlo allo scheletro: serve al
+    // frontend durante l'attesa del doppio-tap per mostrare cosa produrrebbe.
+    Effects previewWildcard();
+
     bool hasWord() const { return hasWord_; }
 
 private:

@@ -149,17 +149,47 @@ void Engine::actDeleteChar(Out& out) {
     if (!pattern_.empty()) {
         pattern_.pop_back();
         recompute(); render(out);
-    } else if (!committed_.empty()) {
-        std::wstring tok = committed_.back();
-        committed_.pop_back();
-        out.backspace(tok.size());                 // rimuovi tutto il token
-        if (!tok.empty() && tok.back() == L' ') tok.pop_back();
-        pattern_ = tok.empty() ? L"" : tok.substr(0, tok.size() - 1);  // riapri senza ultimo char
-        preview_.clear();
-        trailingSpace_ = (!committed_.empty() && !committed_.back().empty()
-                          && committed_.back().back() == L' ');
-        recompute(); render(out);
+        return;
     }
+    if (committed_.empty()) return;
+
+    // token di punteggiatura ("segno " oppure "segno"): cancellazione a due passi,
+    // cosi' il Backspace toglie prima lo spazio e solo dopo il segno (come per le parole).
+    std::wstring& back = committed_.back();
+    if (!back.empty() && cfg_.punctuation.find(back[0]) != std::wstring::npos) {
+        if (back.size() >= 2 && back.back() == L' ') {
+            out.backspace(1);          // 1° passo: via solo lo spazio finale
+            back.pop_back();           // "? " -> "?"
+            trailingSpace_ = false;
+        } else {
+            out.backspace(back.size());  // 2° passo: via il segno...
+            committed_.pop_back();
+            if (!committed_.empty() && !committed_.back().empty()
+                && committed_.back().back() != L' ') {
+                committed_.back().push_back(L' ');   // ...e ripristina lo spazio della parola prima
+                out.insert(L" ");
+                trailingSpace_ = true;
+            } else {
+                trailingSpace_ = (!committed_.empty() && !committed_.back().empty()
+                                  && committed_.back().back() == L' ');
+            }
+            capNext_ = false;          // rimosso il segno: non è più inizio frase
+        }
+        preview_.clear();
+        hasWord_ = false;
+        return;
+    }
+
+    // token di parola: riapri la parola meno l'ultimo carattere (comportamento storico)
+    std::wstring tok = back;
+    committed_.pop_back();
+    out.backspace(tok.size());                 // rimuovi tutto il token
+    if (!tok.empty() && tok.back() == L' ') tok.pop_back();
+    pattern_ = tok.empty() ? L"" : tok.substr(0, tok.size() - 1);  // riapri senza ultimo char
+    preview_.clear();
+    trailingSpace_ = (!committed_.empty() && !committed_.back().empty()
+                      && committed_.back().back() == L' ');
+    recompute(); render(out);
 }
 
 void Engine::actDeleteWord(Out& out) {
@@ -297,6 +327,38 @@ Effects Engine::onTimeout() {
     fx.popup = buildPopup();
     popupText_ = fx.popup.text;
     // il timer e' gia' scaduto: nessuna azione sul timer
+    return fx;
+}
+
+// Percorso esplicito: esegue un'azione gia' risolta dal frontend. Nessun timer
+// qui (il frontend possiede il timing del doppio-tap).
+Effects Engine::onAction(Action a, wchar_t letter) {
+    Out out;
+    Effects fx;
+    previewActive_ = false;   // l'azione risolve l'eventuale attesa: via l'anteprima
+    switch (a) {
+        case Action::Wildcard:   actWildcard(out); break;
+        case Action::Accept:     actAccept(out); break;
+        case Action::Rolling:    actTab(out); break;
+        case Action::DeleteChar: actDeleteChar(out); break;
+        case Action::DeleteWord: actDeleteWord(out); break;
+        case Action::Finalize:   actFinalizeOnEnter(out); fx.passThrough = true; break;
+        case Action::Letter:     actLiteral(out, letter); break;
+    }
+    fx.edits = std::move(out.edits);
+    fx.popup = buildPopup();
+    popupText_ = fx.popup.text;
+    return fx;
+}
+
+Effects Engine::previewWildcard() {
+    Effects fx;
+    if (!pattern_.empty()) {
+        previewCands_ = dict_->computeCandidates(pattern_ + L'?', cfg_.maxCandidates);
+        previewActive_ = true;
+    }
+    fx.popup = buildPopup();
+    popupText_ = fx.popup.text;
     return fx;
 }
 
