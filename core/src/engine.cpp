@@ -5,6 +5,30 @@
 
 namespace onehand {
 
+namespace {
+// Varianti accentate proponibili quando lo scheletro e' una sola lettera (IT).
+// towupper/towlower non maiuscolizzano gli accentati sotto la locale "C", quindi
+// le coppie minuscola/maiuscola sono elencate esplicitamente.
+struct AccentPair { wchar_t lo; wchar_t up; };
+
+const std::vector<AccentPair>& accentsFor(wchar_t base) {
+    static const std::vector<AccentPair> a = { {L'à', L'À'} };
+    static const std::vector<AccentPair> e = { {L'è', L'È'}, {L'é', L'É'} };
+    static const std::vector<AccentPair> i = { {L'ì', L'Ì'} };
+    static const std::vector<AccentPair> o = { {L'ò', L'Ò'} };
+    static const std::vector<AccentPair> u = { {L'ù', L'Ù'} };
+    static const std::vector<AccentPair> none;
+    switch (base) {
+        case L'a': return a;
+        case L'e': return e;
+        case L'i': return i;
+        case L'o': return o;
+        case L'u': return u;
+        default:   return none;
+    }
+}
+} // namespace
+
 // ------------------------------------------------------------------ Out
 // Accumula la sequenza minima di EditEffect. Finche' si fanno cancellazioni e
 // poi inserimenti, resta un'unica coppia; se un backspace arriva dopo un
@@ -51,6 +75,10 @@ void Engine::recompute() {
         cands_.clear();
         cands_.push_back(std::wstring(1, lo));
         if (up != lo) cands_.push_back(std::wstring(1, up));
+        for (const auto& acc : accentsFor(lo)) {
+            cands_.push_back(std::wstring(1, acc.lo));
+            cands_.push_back(std::wstring(1, acc.up));
+        }
         idx_ = (capNext_ && up != lo) ? 1 : 0;  // a inizio frase, default maiuscola
     }
     hasWord_ = !pattern_.empty();

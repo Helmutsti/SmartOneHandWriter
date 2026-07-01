@@ -545,7 +545,13 @@ static void startCapture(int fn) {
 static LRESULT CALLBACK MainProc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
     switch (m) {
     case WM_CREATE: {
-        HFONT font = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
+        // Font esplicito: senza manifest per i common controls v6, DEFAULT_GUI_FONT
+        // mappa sul vecchio "MS Sans Serif", privo dei glifi Unicode usati dal
+        // pulsante Play/Stop (finiscono disegnati come quadratini). Segoe UI li ha.
+        HFONT font = CreateFontW(-15, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                  DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                  CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+        if (!font) font = (HFONT)GetStockObject(DEFAULT_GUI_FONT);
         auto mk = [&](LPCWSTR cls, LPCWSTR txt, DWORD style,
                       int x, int y, int w, int hh, int id) -> HWND {
             HWND c = CreateWindowW(cls, txt, WS_CHILD | WS_VISIBLE | style,
@@ -553,36 +559,38 @@ static LRESULT CALLBACK MainProc(HWND h, UINT m, WPARAM wp, LPARAM lp) {
             SendMessageW(c, WM_SETFONT, (WPARAM)font, TRUE);
             return c;
         };
-        mk(L"STATIC", L"Mano disponibile:", 0, 15, 12, 345, 18, 0);
+        mk(L"STATIC", L"Mano disponibile:", 0, 15, 12, 438, 18, 0);
         g_comboHand = mk(L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_VSCROLL,
-                         15, 32, 345, 200, ID_COMBO_HAND);
+                         15, 32, 438, 200, ID_COMBO_HAND);
         SendMessageW(g_comboHand, CB_ADDSTRING, 0, (LPARAM)L"Mano sinistra");
         SendMessageW(g_comboHand, CB_ADDSTRING, 0, (LPARAM)L"Mano destra");
         SendMessageW(g_comboHand, CB_ADDSTRING, 0, (LPARAM)L"Personalizzato");
         g_editKeys = mk(L"EDIT", L"", WS_BORDER | ES_AUTOHSCROLL,
-                        15, 64, 345, 24, ID_EDIT_KEYS);
-        mk(L"STATIC", L"Dizionario:", 0, 15, 98, 345, 18, 0);
+                        15, 64, 438, 24, ID_EDIT_KEYS);
+        mk(L"STATIC", L"Dizionario:", 0, 15, 98, 438, 18, 0);
         g_comboWl = mk(L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_VSCROLL,
-                       15, 118, 345, 200, ID_COMBO_WORDLIST);
+                       15, 118, 438, 200, ID_COMBO_WORDLIST);
 
         // sezione tasti-funzione: etichetta + campo (nome tasto) + "Assegna" + modo
-        mk(L"STATIC", L"Tasti funzione (Assegna, poi premi un tasto):", 0, 15, 150, 345, 18, 0);
+        mk(L"STATIC", L"Tasti funzione (Assegna, poi premi un tasto):", 0, 15, 150, 438, 18, 0);
         for (int i = 0; i < FN_COUNT; ++i) {
             int y = 172 + i * 28;
             mk(L"STATIC", FN_LABEL[i], SS_CENTERIMAGE, 15, y, 92, 22, 0);
+            // il campo deve stare largo: i nomi tasto localizzati da Windows possono
+            // essere lunghi (es. "BARRA SPAZIATRICE") e prima venivano tagliati.
             g_fnFld[i] = mk(L"EDIT", L"", WS_BORDER | ES_READONLY | ES_AUTOHSCROLL,
-                            110, y, 68, 22, 0);
+                            115, y, 150, 22, 0);
             g_fnBtn[i] = mk(L"BUTTON", L"Assegna", BS_PUSHBUTTON,
-                            183, y, 78, 22, ID_BTN_CAP_BASE + i);
+                            273, y, 78, 22, ID_BTN_CAP_BASE + i);
             g_fnModeCbo[i] = mk(L"COMBOBOX", L"", CBS_DROPDOWNLIST | WS_VSCROLL,
-                                266, y, 94, 120, ID_COMBO_MODE_BASE + i);
+                                359, y, 94, 120, ID_COMBO_MODE_BASE + i);
             SendMessageW(g_fnModeCbo[i], CB_ADDSTRING, 0, (LPARAM)L"Singola");
             SendMessageW(g_fnModeCbo[i], CB_ADDSTRING, 0, (LPARAM)L"Doppia");
         }
 
         int by = 172 + FN_COUNT * 28 + 12;
-        g_btnSave = mk(L"BUTTON", L"Salva", BS_PUSHBUTTON, 15, by, 168, 34, ID_BTN_SAVE);
-        g_btn     = mk(L"BUTTON", L"▶  Play", BS_PUSHBUTTON, 192, by, 168, 34, ID_BTN_PLAY);
+        g_btnSave = mk(L"BUTTON", L"Salva", BS_PUSHBUTTON, 15, by, 210, 34, ID_BTN_SAVE);
+        g_btn     = mk(L"BUTTON", L"▶  Play", BS_PUSHBUTTON, 243, by, 210, 34, ID_BTN_PLAY);
 
         populateWordlists();   // riempie la combo dizionari dai .txt presenti
         setHandCombo();        // seleziona preset/mostra i tasti correnti
@@ -759,7 +767,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int show) {
 
     g_mainWnd = CreateWindowW(L"OneHandMain", L"OneHand",
                               WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX,
-                              CW_USEDEFAULT, CW_USEDEFAULT, 392, 420,
+                              CW_USEDEFAULT, CW_USEDEFAULT, 485, 420,
                               nullptr, nullptr, inst, nullptr);
 
     g_popupWnd = CreateWindowExW(
