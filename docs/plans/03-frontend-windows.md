@@ -90,6 +90,33 @@ preset numpad) è **rinviato** (§11).
   scatta la **Conferma continua** (fine frase, §3 del piano 04).
 - **Apostrofo**: non si digita — arriva dalle parole elise del dizionario (Strategia A, §1.1 piano 04).
 
+### 5.1 Keymap di default (proposta, assistita, mano sinistra)
+Vincolo: i tasti funzione sono **non-lettere** dove devono valere anche in **classica** (lì le lettere si
+digitano). In **assistita** le lettere attorno al blocco sono libere (solo i 9 gruppi sono occupati).
+
+Blocco gruppi T9 (fisso): `q w e / a s d / z x c` → 9 gruppi.
+
+| Tasto | Funzione |
+|---|---|
+| **Spazio** | Conferma continua (finisci parola + vai) |
+| **F** | Roll |
+| **G** | Conferma (chiude, resta) |
+| **R** | Avanti (apre nuova a destra) |
+| **T** | Apri/Edit |
+| **V** / **B** | Naviga ◀ / ▶ |
+| **Bloc Maiusc** | Cancella open (lettera) |
+| **Tab** | Cancella close (parola) |
+| **1 / 2 / 3 / 4** | Punct `.` `,` `?` `!` (valida anche in classica) |
+| **5** | Write |
+| **` (grave)** | Read |
+| **Ctrl+Alt** | Play/Pause *(rinviato: per ora bottone UI)* |
+| **Shift** | *(riservato)* Maiuscola *(rinviato)* |
+
+Loop assistita: gruppi `qweasdzxc` → **F** (Roll) → **Spazio** (conferma+continua), tutto a una mano.
+**Classica**: `R T F G V B` sono lettere → quelle funzioni via **bottoni** o remappate su non-lettere;
+restano valide in entrambe **Spazio, Tab, Bloc Maiusc, fila numeri, grave**. Tutto **configurabile**
+(editor di mapping in §10). Questa è una **proposta di default**, non vincolante.
+
 ## 6. Interception & I/O (cuore del FE Windows)
 - **Hook tastiera low-level** (`WH_KEYBOARD_LL`): quando attivo (Play), intercetta i tasti mappati e li
   traduce in azioni/lettere per l'engine invece di inviarli all'app; i tasti non mappati passano.
