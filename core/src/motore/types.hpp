@@ -2,7 +2,7 @@
 //
 // Il MOTORE è lo strato condiviso sopra il CORE (sohw::Core). Possiede il testo
 // come lista di parole (nessuno spazio memorizzato: gli spazi sono derivati al
-// render dalle regole §1.1 del piano 04). Vedi docs/plans/04-engine-state-improvements.md.
+// render dalle regole di spaziatura, Strategia A apostrofi). Vedi docs/ARCHITETTURA.md.
 #pragma once
 
 #include <string>

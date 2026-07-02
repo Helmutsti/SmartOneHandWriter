@@ -14,8 +14,12 @@
 
 - **Cos'è**: il CORE (namespace `sohw`) è un motore **stateless** che, dato un *contesto* (testo a
   sinistra/destra di uno slot) e una *parola codificata*, restituisce (3) i **match** decodificati e
-  ordinati per contesto e (4) un **ventaglio di parole successive** per ciascun match. Il "MOTORE"
-  (macchina a stati, `engine.cpp`) è separato e **rinviato**.
+  ordinati per contesto e (4) un **ventaglio di parole successive** per ciascun match.
+- **Aggiornamento**: il **MOTORE** (macchina a stati sopra questo CORE) è ora **implementato** in
+  `core/src/motore/` (`motore::Engine`) e pilota il **FE Windows** `sohw_assistant` (`app/windows/`);
+  esiste una prima versione avviabile. Stato complessivo in `docs/ARCHITETTURA.md` §5. Questo documento
+  resta la fonte di verità del **CORE**; le sezioni sotto che parlano del MOTORE come "rinviato" sono
+  storiche. (Il legacy `engine.cpp` con `Document`/`Effects` è un'altra cosa e resta intatto.)
 - **Idea centrale**: *il match è una predizione vincolata* → un unico `IPredictor` (a bigrammi) fa sia
   la disambiguazione del match sia il next-word. Il matching (T9 o digitazione classica) è
   intercambiabile e attivabile/disattivabile.
@@ -385,8 +389,8 @@ Esistente da conservare: root C++17 `/utf-8`; `onehand_core` statico; `onehand_c
 
 ## 19. Piano operativo di dettaglio
 
-Vedi anche il file di piano: `docs/plans/02-core-nuova-concezione.md` (stesso contenuto
-operativo di §10–§16). Prossimo passo alla ripresa: **`git restore .`**, poi milestone 1.
+Il dettaglio operativo è nelle §10–§16 qui sopra. (Il piano `docs/plans/02-core-nuova-concezione.md`,
+di pari contenuto, è stato rimosso a completamento: resta nella storia git.)
 
 ---
 
@@ -554,7 +558,7 @@ Lo sviluppo del CORE è **sospeso** dopo M1–M7 + gruppo A + blocchi ad alta pr
     da `config.json` (oggi solo via API `Core::set*`).
   - Allineare il **tokenizer del CORE** alla Strategia A degli apostrofi del MOTORE (split *dopo*
     l'apostrofo: `dell'aria` → `dell'` + `aria`), per coerenza con il documento del MOTORE
-    (vedi `docs/plans/04-engine-state-improvements.md` §1.1). Oggi il CORE tiene l'apostrofo word-internal
+    (Strategia A del MOTORE, vedi `docs/ARCHITETTURA.md`). Oggi il CORE tiene l'apostrofo word-internal
     senza splittare.
   - Frontend: compilare la GUI **Qt** (serve Qt6); la GUI **Win32** è solo un banco (mostra il next del
     solo match in cima, niente click-per-scegliere, non ridimensionabile); **macOS** non allineato al CORE.
@@ -571,7 +575,6 @@ Lo sviluppo del CORE è **sospeso** dopo M1–M7 + gruppo A + blocchi ad alta pr
     cancellazioni, gestione documento).
 
 ### 21.5 Puntatori
-- Piano operativo: `docs/plans/02-core-nuova-concezione.md`.
-- Architettura complessiva (CORE/MOTORE/FE): `docs/ARCHITETTURA.md`.
+- Architettura complessiva (CORE/MOTORE/FE) e stato/backlog: `docs/ARCHITETTURA.md`.
 - Memoria di sessione: `…/memory/core-nuova-concezione.md` (+ indice `MEMORY.md`).
 - Commit di riferimento: `45cd8e3`.

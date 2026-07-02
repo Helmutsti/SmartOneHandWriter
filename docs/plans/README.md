@@ -1,6 +1,6 @@
 # Piani (docs/plans)
 
-Qui vivono **tutti i piani** del progetto SmartOneHandWriter, versionati col codice, così viaggiano
+Qui vivono i **piani** del progetto SmartOneHandWriter, versionati col codice, così viaggiano
 col repo e non restano solo sulla macchina di sviluppo.
 
 ## Convenzione
@@ -10,9 +10,11 @@ col repo e non restano solo sulla macchina di sviluppo.
   rimosso: la copia nel repo è la fonte di verità.
 - I piani sono storia/riferimento: non si riscrivono a posteriori. Lo stato *attuale* di un componente
   vive nei suoi documenti (es. `docs/CORE-nuova-concezione.md`, `docs/ARCHITETTURA.md`).
+- **Piani completati**: quando un piano è interamente realizzato, il suo contenuto vivo (stato + backlog
+  residuo) confluisce nei documenti di stato e il file di piano viene **rimosso** (resta nella storia git).
 
 ## Indice
-- `01-t9-rewrite.md` — riscrittura del core dal modello wildcard al modello T9 word-centric.
-- `02-core-nuova-concezione.md` — CORE stateless (matching + predittivo) della "nuova concezione".
-- `03-frontend-windows.md` — frontend Windows (overlay buffer + pannello tasti, intercettazione, modi).
-- `04-engine-state-improvements.md` — MOTORE: macchina a stati sopra il CORE + miglioramenti estratti dal FE.
+Nessun piano attivo: i piani `01`–`04` (riscrittura core T9, CORE stateless, FE Windows, MOTORE
+macchina a stati) sono **completati** e rimossi. Il risultato è la prima **versione avviabile**
+dell'assistente Windows; stato e backlog residuo in `docs/ARCHITETTURA.md` (§5–§6) e, per il CORE,
+`docs/CORE-nuova-concezione.md`. Lo storico dei piani è recuperabile da git (`git log -- docs/plans/`).

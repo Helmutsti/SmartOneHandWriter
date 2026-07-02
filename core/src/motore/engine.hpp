@@ -4,8 +4,8 @@
 // M2: navigazione / apertura / Roll + integrazione con sohw::Core per i candidati
 //     contestuali della parola aperta; digitazione (typeKey) e regola "letterale
 //     primo" in modalità classica.
-// M3 (futuro): Confirm / Advance / ConfirmContinue / Punct / cancellazioni.
-// Vedi docs/plans/04-engine-state-improvements.md.
+// M3: Confirm / Advance / ConfirmContinue / Punct / cancellazioni.
+// M4: Read (loadResolved) / Write. Vedi docs/ARCHITETTURA.md.
 #pragma once
 
 #include "motore/types.hpp"

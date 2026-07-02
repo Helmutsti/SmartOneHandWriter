@@ -1,8 +1,7 @@
 // SmartOneHandWriter - Assistente di digitazione (frontend Windows).
 //
 // FE sottile (adattatore di solo I/O) sopra il MOTORE condiviso (motore::Engine),
-// che a sua volta sta sopra il CORE (sohw::Core). Vedi docs/ARCHITETTURA.md e
-// docs/plans/03-frontend-windows.md.
+// che a sua volta sta sopra il CORE (sohw::Core). Vedi docs/ARCHITETTURA.md.
 //
 //  - Pannello: un bottone per funzione + Play/Pause + toggle Assistita/Classica.
 //  - Overlay: box colorato senza bordi, riga singola, vicino al mouse, che mostra

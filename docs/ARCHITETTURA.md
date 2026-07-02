@@ -75,10 +75,48 @@ diff con le API native — contratto indipendente dalla piattaforma. (Vedi `Effe
 Orientamento iniziale suggerito: **(A)** buffer canonico, con un **editor interno** come contesto
 primario e iniezione best-effort verso app esterne; ambito e piattaforme da confermare.
 
-## 5. Stato
+## 5. Stato — versione avviabile ✅
 
-- **CORE**: implementato e testato (M1–M7 + gruppo A + prestazioni), **in pausa**. Vedi
+I tre livelli sono implementati e la prima **versione avviabile** dell'assistente Windows esiste.
+
+- **CORE** (`sohw::Core`): implementato e testato (M1–M7 + gruppo A + prestazioni). Vedi
   `CORE-nuova-concezione.md`.
-- **MOTORE / FE**: in pianificazione. Piani in `docs/plans/03-frontend-windows.md` (FE Windows) e
-  `docs/plans/04-engine-state-improvements.md` (macchina a stati del MOTORE + miglioramenti). Questo
-  documento fissa la decisione strutturale di fondo.
+- **MOTORE** (`motore::Engine`, `core/src/motore/`): macchina a stati sopra il CORE. Implementate
+  navigazione/apertura/Roll, digitazione (T9 e classica "letterale primo"), Confirm/Advance/
+  ConfirmContinue, Punct (con conferma continua automatica a fine frase), DeleteLetter/DeleteWord,
+  Read (`loadResolved`) e Write. Tokenizzazione Strategia A + regole di spaziatura. Test `motore_tests`
+  verdi (M1–M4 + integrazione reale col CORE).
+- **FE Windows** (`app/windows/`, target `sohw_assistant`): adattatore di solo I/O sopra `motore_core`.
+  Pannello (un bottone per funzione + Play/Pause + toggle Assistita/Classica), overlay topmost
+  near-mouse con evidenziazione selezionata/aperta e auto-hide a buffer vuoto, hook tastiera
+  `WH_KEYBOARD_LL` (keymap `qweasdzxc` + funzioni), Read/Write via clipboard (+`Ctrl+V`).
+
+**Cablatura scelta**: il FE C++ chiama `motore_core` **direttamente** (niente C ABI dedicata del MOTORE);
+la C ABI del CORE (`smartcore_c`) resta per i linguaggi terzi. Build: `cmake -B build && cmake --build
+build --config Release` → `build/app/windows/Release/sohw_assistant.exe`; suite test 7/7 verde.
+
+## 6. Backlog / evoluzioni future
+
+Consolidato dai piani (ora completati e rimossi; storia in git). Per priorità:
+
+**FE / MOTORE**
+- Editor UI di rimappatura tasti (fisico ↔ gruppo/funzione) + preset **tastierino numerico** (F16).
+- Attivazione delle funzioni **solo da tastiera** (obiettivo uso a una mano); doppio-tap per funzioni
+  extra; **hotkey globale** per Play/Pause (F17/F18). Oggi Play/Pause e le funzioni sono anche su bottoni.
+- **Overlay near-caret** e `Read`/selezione via **UIA** (posizione reale del cursore dell'app), invece
+  del near-mouse e della clipboard (E13/D10).
+- **Iniezione incrementale** in-app via `Effects`/diff (oggi `Write` incolla il buffer "a blocco").
+- **Maiuscole** (G20): auto a inizio frase (dopo `. ! ?`) + tasto "Maiuscola"; oggi tutto minuscolo.
+- **C ABI del MOTORE** (`motore_c.h`) per frontend non-C++ (macOS/altro), se e quando servirà.
+- Persistenza della config del FE (modalità, keymap).
+
+**CORE** (dettagli in `CORE-nuova-concezione.md` §21.4)
+- Trigrammi o backend **BERT** dietro `IPredictor` (contesto profondo/bidirezionale).
+- Taratura pesi interpolazione e pruning; smoothing (Kneser-Ney) al posto dell'interpolazione lineare.
+- Esporre i parametri di ranking da `config.json` (oggi solo via API `Core::set*`).
+- Allineare il tokenizer del CORE alla Strategia A degli apostrofi del MOTORE.
+
+**Portabilità / packaging**
+- Verifica build su Linux/macOS (il CORE è portabile).
+- Distribuzione dell'assistente: oggi i dati sono trovati via `SOHW_DATA_DIR` assoluto (build-tree);
+  per un pacchetto standalone i dati (`wordlist_it.txt`, `it.bigrams.bin`) vanno accanto all'eseguibile.

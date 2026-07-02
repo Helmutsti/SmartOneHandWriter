@@ -69,15 +69,22 @@ Il programma non è già pronto: va **creato una volta** dal computer (si chiama
    ```
 
 4. **Fatto.** Trovi il programma qui:
-   **`build\platform\windows\Release\onehand.exe`**
-   Accanto ci sono già le impostazioni (`config.json`) e il dizionario
-   (`wordlist_it.txt`): è pronto, non serve installare altro.
+   **`build\app\windows\Release\sohw_assistant.exe`**
+   Il dizionario e il modello di parole vengono letti dalla cartella `data\` del
+   progetto: è pronto, non serve installare altro.
 
-**Per avviarlo:** fai doppio clic su `onehand.exe`. Compare una finestrella con
-un pulsante **▶ Play**. → Vai alla **[Parte 2 · Come si usa](#parte-2--come-si-usa)**.
+**Per avviarlo:** fai doppio clic su `sohw_assistant.exe`. Compaiono un **pannello**
+di comandi e (quando scrivi) un **riquadro** in sovraimpressione col testo. All'avvio
+è **in pausa**: premi **Play/Pause** per accendere. → Vai alla
+**[Parte 2 · Come si usa](#parte-2--come-si-usa)**.
 
 > 🔁 **Hai cambiato qualcosa e vuoi rifarlo?** Basta ripetere solo
 > `cmake --build build --config Release`.
+>
+> 🧪 **Versione precedente.** Lo stesso build produce anche `build\platform\windows\
+> Release\onehand.exe`, il **prototipo T9 a tastierino numerico** (una cifra per
+> lettera). È il predecessore dell'assistente ed è descritto più in basso; la demo
+> macOS usa lo stesso schema.
 
 ---
 
@@ -131,7 +138,64 @@ alternative. Il pulsante **Pulisci** azzera il foglio.
 
 # Parte 2 · Come si usa
 
-Questa è la parte che ti serve ogni giorno. È semplice: pochi tasti.
+L'assistente Windows (`sohw_assistant.exe`) ti aiuta a scrivere **in qualsiasi
+applicazione**: intercetta i tasti, tiene un **buffer** di testo mostrato in un
+riquadro in sovraimpressione, e lo scrive nell'app attiva quando glielo chiedi.
+
+## Le due finestre
+
+- **Pannello**: un bottone per ogni funzione, più **Play/Pause** e **Modalità**.
+- **Riquadro** (overlay): appare vicino al mouse mentre scrivi e mostra il buffer;
+  la parola **selezionata** è azzurra, quella **aperta** (in scrittura) è ambra.
+  Sparisce quando il buffer è vuoto.
+
+## Accendere e spegnere
+
+- Premi **Play/Pause** sul pannello per accendere (intercetta la tastiera) o
+  mettere in pausa (i tasti tornano normali).
+- **Modalità** alterna **Assistita (T9)** e **Classica**.
+
+## Le due modalità
+
+- **Assistita (T9)**: 9 tasti raggruppano le lettere —
+  `q w e / a s d / z x c` (tre gruppi per riga). Premi **un** tasto per lettera e
+  il dizionario indovina la parola; **Roll** cicla le alternative.
+- **Classica**: ogni lettera `a`–`z` vale se stessa, con completamento; il primo
+  candidato è sempre ciò che hai digitato (utile per nomi e parole fuori dizionario).
+
+## I tasti (modalità assistita)
+
+Oltre ai bottoni del pannello, con l'assistente **acceso** valgono queste scorciatoie
+(tutte a portata di una mano sinistra):
+
+| Premi | Funzione |
+|-------|----------|
+| `q w e a s d z x c` | compongono la parola (9 gruppi di lettere) |
+| **F** | **Roll** — scorre le parole possibili con la stessa sequenza |
+| **G** | **Conferma** — chiude la parola e resta lì |
+| **R** | **Avanti** — apre una nuova parola a destra |
+| **Spazio** | **Conferma continua** — chiude e va avanti (automatica a fine frase) |
+| **T** | **Apri/Edit** — riapre la parola selezionata per correggerla |
+| **V** / **B** | **Naviga** ◀ / ▶ tra le parole |
+| **Backspace** / **Bloc Maiusc** | cancella **una lettera** della parola aperta |
+| **Tab** | cancella **l'intera parola** selezionata |
+| **1 2 3 4** | punteggiatura `.` `,` `?` `!` |
+| **5** | **Write** — scrive il buffer nell'app attiva e lo svuota |
+| **` (grave)** | **Read** — carica nel buffer il testo copiato negli appunti |
+
+> **Read/Write** passano dagli **appunti**: *Read* legge quello che hai copiato con
+> `Ctrl+C`; *Write* incolla il buffer nell'app attiva (con `Ctrl+V`) e poi ripristina
+> i tuoi appunti. Gli **spazi** e la **punteggiatura** tra le parole li mette il
+> programma; in Classica i tasti-lettera occupano `R T F G V B`, quindi quelle
+> funzioni si usano dai **bottoni**.
+
+---
+
+## Versione precedente (prototipo T9 numpad · demo macOS)
+
+Le sezioni seguenti descrivono il **prototipo predecessore** (`onehand.exe` su
+Windows e la demo macOS): tastierino numerico `2`–`9`, un solo campo, senza
+Read/Write. L'assistente sopra lo sostituisce su Windows.
 
 ## Accendere e spegnere
 
