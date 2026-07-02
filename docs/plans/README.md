@@ -14,4 +14,5 @@ col repo e non restano solo sulla macchina di sviluppo.
 ## Indice
 - `01-t9-rewrite.md` — riscrittura del core dal modello wildcard al modello T9 word-centric.
 - `02-core-nuova-concezione.md` — CORE stateless (matching + predittivo) della "nuova concezione".
-- _(prossimo)_ piano del **FE / MOTORE** — in arrivo.
+- `03-frontend-windows.md` — frontend Windows (overlay buffer + pannello tasti, intercettazione, modi).
+- `04-engine-state-improvements.md` — MOTORE: macchina a stati sopra il CORE + miglioramenti estratti dal FE.

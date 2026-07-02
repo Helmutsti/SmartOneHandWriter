@@ -79,5 +79,6 @@ primario e iniezione best-effort verso app esterne; ambito e piattaforme da conf
 
 - **CORE**: implementato e testato (M1–M7 + gruppo A + prestazioni), **in pausa**. Vedi
   `CORE-nuova-concezione.md`.
-- **MOTORE / FE**: in fase di pianificazione (il piano del FE arriva a breve e finirà in
-  `docs/plans/`). Questo documento fissa la decisione strutturale di fondo.
+- **MOTORE / FE**: in pianificazione. Piani in `docs/plans/03-frontend-windows.md` (FE Windows) e
+  `docs/plans/04-engine-state-improvements.md` (macchina a stati del MOTORE + miglioramenti). Questo
+  documento fissa la decisione strutturale di fondo.
