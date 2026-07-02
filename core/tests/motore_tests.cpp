@@ -184,6 +184,17 @@ int main() {
     }
     std::puts("motore_tests: OK (M3 composizione)");
 
+    // ================= M4: read / write ===================================
+    {
+        Engine e;
+        e.loadResolved("ciao mondo");          // read = loadResolved
+        assert(e.currentText() == "ciao mondo");
+        std::string t = e.write();              // ritorna il testo e svuota
+        assert(t == "ciao mondo");
+        assert(e.empty() && e.wordCount() == 0);
+    }
+    std::puts("motore_tests: OK (M4 read/write)");
+
     // --- integrazione col CORE reale (se i dati sono presenti) -------------
 #ifdef SOHW_DATA_DIR
     {

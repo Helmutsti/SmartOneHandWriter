@@ -23,7 +23,8 @@ endif()
 # Il frontend nativo: per ora solo Windows.
 if(WIN32)
     add_subdirectory(platform/windows)
-    add_subdirectory(gui/win32)   # banco di prova Win32 del CORE
+    add_subdirectory(gui/win32)     # banco di prova Win32 del CORE
+    add_subdirectory(app/windows)   # assistente di digitazione (FE sopra il MOTORE)
 endif()
 
 # Banco di prova da terminale del CORE (sempre disponibile, zero dipendenze).

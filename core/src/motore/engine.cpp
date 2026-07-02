@@ -50,6 +50,10 @@ static std::string joinRange(const std::vector<Word>& w, int begin, int end) {
 }
 
 // ------------------------------------------------------------------ risorse / modalità
+void Engine::setConfig(const onehand::Config& cfg) {
+    core_ = sohw::Core(cfg);
+    core_.setMode(assisted_ ? sohw::InputMode::T9 : sohw::InputMode::Literal);
+}
 void Engine::loadWordlist(std::istream& in) { core_.loadWordlist(in); }
 void Engine::loadBigramModel(const std::string& binPath) { core_.loadBigramModel(binPath); }
 void Engine::setMode(bool assisted) {
@@ -228,6 +232,16 @@ void Engine::recomputeOpen() {
     wd.idx = 0;
     // Fallback: se nessun candidato (T9 senza match), mostra il codice digitato.
     wd.text = wd.cands.empty() ? encoded : wd.cands[0];
+}
+
+// ------------------------------------------------------------------ read / write (M4)
+std::string Engine::currentText() const { return render().fullText; }
+
+std::string Engine::write() {
+    if (open_ >= 0) confirm();
+    std::string t = render().fullText;
+    clear();
+    return t;
 }
 
 // ------------------------------------------------------------------ render (M1)

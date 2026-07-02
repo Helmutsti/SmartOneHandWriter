@@ -22,6 +22,9 @@ public:
     Engine() = default;
 
     // --- risorse / modalità (delegano al CORE) -----------------------------
+    // Ricostruisce il CORE con una Config (es. keymap T9 personalizzata).
+    // ATTENZIONE: azzera dizionario/modello -> chiamare PRIMA di loadWordlist/loadBigramModel.
+    void setConfig(const onehand::Config& cfg);
     void loadWordlist(std::istream& in);
     void loadBigramModel(const std::string& binPath);
     void setMode(bool assisted);          // true = T9 (assistita), false = classica
@@ -32,9 +35,10 @@ public:
     void loadResolved(const std::string& utf8Text);
     void clear();
 
-    int wordCount() const { return static_cast<int>(words_.size()); }
-    int selection() const { return sel_; }
-    int openIndex() const { return open_; }
+    int  wordCount() const { return static_cast<int>(words_.size()); }
+    bool empty() const { return words_.empty(); }
+    int  selection() const { return sel_; }
+    int  openIndex() const { return open_; }
 
     // --- azioni ------------------------------------------------------------
     void select(int index);   // sposta la selezione (clamp); primitiva usata dalla navigazione
@@ -54,6 +58,10 @@ public:
     void punct(const std::string& sym);  // conferma + inserisce token Punct; se terminale (. ! ?) -> conferma continua
     void deleteLetter();     // parola aperta: rimuove l'ultima lettera/cella (se vuota rimuove la parola)
     void deleteWord();       // rimuove l'intera parola selezionata
+
+    // --- read / write (M4) -------------------------------------------------
+    std::string currentText() const;   // testo completo corrente (render().fullText)
+    std::string write();               // conferma l'aperta, ritorna il testo completo e svuota il buffer
 
     // --- render ------------------------------------------------------------
     RenderModel render() const;
