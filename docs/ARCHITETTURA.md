@@ -88,7 +88,8 @@ I tre livelli sono implementati e la prima **versione avviabile** dell'assistent
   verdi (M1–M4 + integrazione reale col CORE).
 - **FE Windows** (`app/windows/`, target `sohw_assistant`): adattatore di solo I/O sopra `motore_core`.
   Pannello (un bottone per funzione + Play/Pause + toggle Assistita/Classica), overlay topmost
-  near-mouse con evidenziazione selezionata/aperta e auto-hide a buffer vuoto, hook tastiera
+  fisso e trascinabile (WS_EX_NOACTIVATE, drag via HTCAPTION) con evidenziazione selezionata/aperta
+  e auto-hide a buffer vuoto, hook tastiera
   `WH_KEYBOARD_LL` (keymap stile cellulare `weasdzxc` = tasti 2–9, Spazio = 0; + funzioni;
   Esc = Scarta), Read/Write via clipboard (+`Ctrl+V`).
 

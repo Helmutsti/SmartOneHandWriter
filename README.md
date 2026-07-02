@@ -145,9 +145,9 @@ riquadro in sovraimpressione, e lo scrive nell'app attiva quando glielo chiedi.
 ## Le due finestre
 
 - **Pannello**: un bottone per ogni funzione, più **Play/Pause** e **Modalità**.
-- **Riquadro** (overlay): appare vicino al mouse mentre scrivi e mostra il buffer;
-  la parola **selezionata** è azzurra, quella **aperta** (in scrittura) è ambra.
-  Sparisce quando il buffer è vuoto.
+- **Riquadro** (overlay): mostra il buffer mentre scrivi; la parola **selezionata**
+  è azzurra, quella **aperta** (in scrittura) è ambra. Sta **fermo** e lo puoi
+  **trascinare** col mouse dove preferisci; sparisce quando il buffer è vuoto.
 
 ## Accendere e spegnere
 

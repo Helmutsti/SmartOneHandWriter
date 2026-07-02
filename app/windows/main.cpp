@@ -4,8 +4,9 @@
 // che a sua volta sta sopra il CORE (sohw::Core). Vedi docs/ARCHITETTURA.md.
 //
 //  - Pannello: un bottone per funzione + Play/Pause + toggle Assistita/Classica.
-//  - Overlay: box colorato senza bordi, riga singola, vicino al mouse, che mostra
-//    il buffer con parola selezionata/aperta evidenziate; sparisce a buffer vuoto.
+//  - Overlay: box colorato senza bordi, riga singola, che mostra il buffer con
+//    parola selezionata/aperta evidenziate; sparisce a buffer vuoto. Sta FERMO e si
+//    può TRASCINARE col mouse (non insegue più il cursore).
 //  - Hook tastiera globale (WH_KEYBOARD_LL): in assistita w e a s d z x c = gruppi
 //    T9 come su un cellulare (w=2 e=3 a=4 s=5 d=6 z=7 x=8 c=9); Spazio=0=Conferma
 //    continua; F=Roll G=Conferma R=Avanti T=Apri V/B=Naviga;
@@ -149,11 +150,9 @@ static void refreshOverlay() {
 
     if (g_engine.empty()) { ShowWindow(g_overlay, SW_HIDE); return; }
 
-    // posiziona vicino al mouse
-    POINT pt; GetCursorPos(&pt);
-    const int W = 900, H = 40;
-    SetWindowPos(g_overlay, HWND_TOPMOST, pt.x + 12, pt.y + 22, W, H,
-                 SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    // resta dove l'utente l'ha lasciato (trascinabile): mostra senza spostare né ridimensionare
+    SetWindowPos(g_overlay, HWND_TOPMOST, 0, 0, 0, 0,
+                 SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
     InvalidateRect(g_overlay, nullptr, TRUE);
 }
 
@@ -213,6 +212,8 @@ static void paintOverlay(HWND hwnd) {
 
 static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     if (msg == WM_PAINT) { paintOverlay(hwnd); return 0; }
+    // Tutta la finestra fa da "barra del titolo": premi e trascina per spostarla.
+    if (msg == WM_NCHITTEST) return HTCAPTION;
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
@@ -442,10 +443,14 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int show) {
     oc.hCursor = LoadCursor(nullptr, IDC_ARROW);
     oc.lpszClassName = L"SohwOverlay";
     RegisterClassExW(&oc);
-    g_overlay = CreateWindowExW(WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_TRANSPARENT |
+    // Niente WS_EX_TRANSPARENT: la finestra riceve il mouse ed è trascinabile.
+    // WS_EX_NOACTIVATE: trascinarla non ruba il focus all'app in cui si scrive.
+    const int OVW = 900, OVH = 40;
+    const int sw = GetSystemMetrics(SM_CXSCREEN), sh = GetSystemMetrics(SM_CYSCREEN);
+    g_overlay = CreateWindowExW(WS_EX_TOPMOST | WS_EX_LAYERED |
                                 WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
                                 oc.lpszClassName, L"", WS_POPUP,
-                                0, 0, 900, 40, nullptr, nullptr, inst, nullptr);
+                                (sw - OVW) / 2, sh - 160, OVW, OVH, nullptr, nullptr, inst, nullptr);
     SetLayeredWindowAttributes(g_overlay, 0, 235, LWA_ALPHA);
 
     // --- panel window ---
