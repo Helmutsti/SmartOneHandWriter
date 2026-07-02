@@ -34,6 +34,8 @@ struct RenderSpan {
     std::string text;
     Highlight   hl = Highlight::None;
     bool        spaceBefore = false;
+    int         typedCount = 0;   // n. di lettere/celle effettivamente digitate (solo parola aperta;
+                                  // il FE ci sottolinea il prefisso: il resto è completamento)
 };
 
 // Modello di render completo per l'overlay: testo intero + span con evidenziazioni

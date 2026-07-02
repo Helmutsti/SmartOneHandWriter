@@ -255,6 +255,10 @@ RenderModel Engine::render() const {
         else if (static_cast<int>(i) == sel_) s.hl = Highlight::Selected;
         else                                  s.hl = Highlight::None;
         s.spaceBefore = (i > 0) && needsSpace(words_[i - 1], words_[i]);
+        // Lettere effettivamente digitate (solo per la parola aperta): il FE ne
+        // sottolinea il prefisso, così si distingue dal completamento del dizionario.
+        s.typedCount = (static_cast<int>(i) == open_)
+                           ? static_cast<int>(words_[i].cells.size()) : 0;
         r.spans.push_back(std::move(s));
     }
     for (const auto& s : r.spans) {

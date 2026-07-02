@@ -49,7 +49,7 @@ static HWND           g_status = nullptr; // etichetta stato nel pannello
 static HFONT          g_font   = nullptr;
 static HFONT          g_overlayFont = nullptr;
 
-struct PaintSpan { std::wstring text; int hl; bool spaceBefore; };
+struct PaintSpan { std::wstring text; int hl; bool spaceBefore; int typed; };
 static std::vector<PaintSpan> g_spans;
 
 // colori
@@ -57,6 +57,8 @@ static const COLORREF kBg     = RGB(43, 43, 43);
 static const COLORREF kFg     = RGB(240, 240, 240);
 static const COLORREF kSelBg  = RGB(58, 110, 165);   // azzurro
 static const COLORREF kOpenBg = RGB(217, 164, 65);   // ambra
+static const COLORREF kTyped  = RGB(30, 30, 30);     // sottolineatura del prefisso digitato
+static const COLORREF kTail   = RGB(90, 74, 40);     // completamento (coda) attenuato, su ambra
 
 // ------------------------------------------------------------------ azioni
 enum Act {
@@ -143,7 +145,7 @@ static void refreshOverlay() {
     motore::RenderModel r = g_engine.render();
     g_spans.clear();
     for (const auto& s : r.spans)
-        g_spans.push_back({ u8ToW(s.text), (int)s.hl, s.spaceBefore });
+        g_spans.push_back({ u8ToW(s.text), (int)s.hl, s.spaceBefore, s.typedCount });
 
     if (g_engine.empty()) { ShowWindow(g_overlay, SW_HIDE); return; }
 
@@ -184,8 +186,25 @@ static void paintOverlay(HWND hwnd) {
             HBRUSH hb = CreateSolidBrush(s.hl == (int)motore::Highlight::Open ? kOpenBg : kSelBg);
             FillRect(hdc, &hr, hb); DeleteObject(hb);
         }
-        SetTextColor(hdc, kFg);
-        TextOutW(hdc, x, y, s.text.c_str(), (int)s.text.size());
+        // Parola aperta: distingui il prefisso DIGITATO (bianco + sottolineato) dalla
+        // coda di COMPLETAMENTO del dizionario (attenuata), così si vede quante lettere
+        // si sono premute. Le altre parole: testo pieno.
+        if (s.hl == (int)motore::Highlight::Open && s.typed > 0) {
+            int n = s.typed; if (n > (int)s.text.size()) n = (int)s.text.size();
+            SIZE pre; GetTextExtentPoint32W(hdc, s.text.c_str(), n, &pre);
+            SetTextColor(hdc, kFg);
+            TextOutW(hdc, x, y, s.text.c_str(), n);
+            if (n < (int)s.text.size()) {
+                SetTextColor(hdc, kTail);
+                TextOutW(hdc, x + pre.cx, y, s.text.c_str() + n, (int)s.text.size() - n);
+            }
+            RECT ul = { x, y + sz.cy, x + pre.cx, y + sz.cy + 2 };   // sottolineatura del prefisso
+            HBRUSH ub = CreateSolidBrush(kTyped);
+            FillRect(hdc, &ul, ub); DeleteObject(ub);
+        } else {
+            SetTextColor(hdc, kFg);
+            TextOutW(hdc, x, y, s.text.c_str(), (int)s.text.size());
+        }
         x += sz.cx;
     }
     SelectObject(hdc, old);
