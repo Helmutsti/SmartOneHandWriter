@@ -157,9 +157,10 @@ riquadro in sovraimpressione, e lo scrive nell'app attiva quando glielo chiedi.
 
 ## Le due modalità
 
-- **Assistita (T9)**: 9 tasti raggruppano le lettere —
-  `q w e / a s d / z x c` (tre gruppi per riga). Premi **un** tasto per lettera e
-  il dizionario indovina la parola; **Roll** cicla le alternative.
+- **Assistita (T9)**: come su un **cellulare**. Gli 8 tasti `w e / a s d / z x c`
+  fanno da tasti **2–9** (`w`=2=abc, `e`=3=def, `a`=4=ghi, `s`=5=jkl, `d`=6=mno,
+  `z`=7=pqrs, `x`=8=tuv, `c`=9=wxyz) e lo **Spazio** è lo `0`. Premi **un** tasto per
+  lettera e il dizionario indovina la parola; **Roll** cicla le alternative.
 - **Classica**: ogni lettera `a`–`z` vale se stessa, con completamento; il primo
   candidato è sempre ciò che hai digitato (utile per nomi e parole fuori dizionario).
 
@@ -170,15 +171,16 @@ Oltre ai bottoni del pannello, con l'assistente **acceso** valgono queste scorci
 
 | Premi | Funzione |
 |-------|----------|
-| `q w e a s d z x c` | compongono la parola (9 gruppi di lettere) |
+| `w e a s d z x c` | compongono la parola (tasti 2–9 del cellulare) |
 | **F** | **Roll** — scorre le parole possibili con la stessa sequenza |
 | **G** | **Conferma** — chiude la parola e resta lì |
 | **R** | **Avanti** — apre una nuova parola a destra |
-| **Spazio** | **Conferma continua** — chiude e va avanti (automatica a fine frase) |
+| **Spazio** (lo `0`) | **Conferma continua** — chiude e va avanti (automatica a fine frase) |
 | **T** | **Apri/Edit** — riapre la parola selezionata per correggerla |
 | **V** / **B** | **Naviga** ◀ / ▶ tra le parole |
 | **Backspace** / **Bloc Maiusc** | cancella **una lettera** della parola aperta |
 | **Tab** | cancella **l'intera parola** selezionata |
+| **Esc** | **Scarta** — butta via tutto il buffer (il riquadro sparisce) |
 | **1 2 3 4** | punteggiatura `.` `,` `?` `!` |
 | **5** | **Write** — scrive il buffer nell'app attiva e lo svuota |
 | **` (grave)** | **Read** — carica nel buffer il testo copiato negli appunti |

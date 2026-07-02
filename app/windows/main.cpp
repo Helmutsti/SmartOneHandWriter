@@ -6,9 +6,10 @@
 //  - Pannello: un bottone per funzione + Play/Pause + toggle Assistita/Classica.
 //  - Overlay: box colorato senza bordi, riga singola, vicino al mouse, che mostra
 //    il buffer con parola selezionata/aperta evidenziate; sparisce a buffer vuoto.
-//  - Hook tastiera globale (WH_KEYBOARD_LL): in assistita q w e a s d z x c = gruppi
-//    T9; F=Roll G=Conferma R=Avanti T=Apri V/B=Naviga; Spazio=Conferma continua;
-//    Tab/Backspace/BlocMaiusc=cancella; 1..4=. , ? !; 5=Write; `=Read.
+//  - Hook tastiera globale (WH_KEYBOARD_LL): in assistita w e a s d z x c = gruppi
+//    T9 come su un cellulare (w=2 e=3 a=4 s=5 d=6 z=7 x=8 c=9); Spazio=0=Conferma
+//    continua; F=Roll G=Conferma R=Avanti T=Apri V/B=Naviga;
+//    Tab/Backspace/BlocMaiusc=cancella; Esc=Scarta; 1..4=. , ? !; 5=Write; `=Read.
 //  - Read/Write via clipboard (Read = legge; Write = incolla con Ctrl+V).
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -61,7 +62,7 @@ static const COLORREF kOpenBg = RGB(217, 164, 65);   // ambra
 enum Act {
     A_NONE = 0, A_NAV_PREV, A_NAV_NEXT, A_OPEN, A_ROLL, A_CONFIRM, A_ADVANCE,
     A_CONTINUE, A_DEL_LETTER, A_DEL_WORD, A_DOT, A_COMMA, A_QUES, A_EXCL,
-    A_READ, A_WRITE
+    A_READ, A_WRITE, A_DISCARD
 };
 
 static void refreshOverlay();
@@ -131,6 +132,7 @@ static void performAction(Act a) {
         case A_EXCL:      g_engine.punct("!"); break;
         case A_READ:      doRead(); return;   // già refresha
         case A_WRITE:     doWrite(); return;  // già refresha
+        case A_DISCARD:   g_engine.clear(); break;   // butta via il buffer (l'overlay sparisce)
         default: break;
     }
     refreshOverlay();
@@ -216,17 +218,18 @@ static LRESULT CALLBACK KeyProc(int nCode, WPARAM wParam, LPARAM lParam) {
 
 // mappa un tasto "gruppo" (assistita) o lettera (classica) al simbolo da digitare
 static bool groupSymbol(DWORD vk, std::string& out) {
-    // q w e a s d z x c  -> 9 gruppi (assistita); in classica tutte le lettere sono letterali
+    // w e a s d z x c -> 8 gruppi (assistita); in classica tutte le lettere sono letterali
     if (vk >= 'A' && vk <= 'Z') { out = std::string(1, (char)('a' + (vk - 'A'))); return true; }
     return false;
 }
 static bool isGroupKey(DWORD vk) {
-    switch (vk) { case 'Q': case 'W': case 'E': case 'A': case 'S': case 'D':
+    switch (vk) { case 'W': case 'E': case 'A': case 'S': case 'D':
                   case 'Z': case 'X': case 'C': return true; default: return false; }
 }
 
 static bool isMapped(DWORD vk) {
     if (vk == VK_SPACE || vk == VK_TAB || vk == VK_BACK || vk == VK_CAPITAL) return true;
+    if (vk == VK_ESCAPE) return true;                // Scarta
     if (vk == VK_OEM_3) return true;                 // `
     if (vk >= '1' && vk <= '5') return true;
     if (vk >= 'A' && vk <= 'Z') return true;
@@ -248,6 +251,7 @@ static bool handleKeyDown(DWORD vk) {
         case '4':        performAction(A_EXCL);  return true;
         case '5':        performAction(A_WRITE); return true;
         case VK_OEM_3:   performAction(A_READ);  return true;
+        case VK_ESCAPE:  performAction(A_DISCARD); return true;
         default: break;
     }
 
@@ -281,7 +285,7 @@ static bool handleKeyDown(DWORD vk) {
 enum {
     IDB_PLAY = 1000, IDB_MODE, IDB_PREV, IDB_NEXT, IDB_OPEN, IDB_ROLL, IDB_CONFIRM,
     IDB_ADVANCE, IDB_CONTINUE, IDB_DELL, IDB_DELW, IDB_DOT, IDB_COMMA, IDB_QUES,
-    IDB_EXCL, IDB_READ, IDB_WRITE
+    IDB_EXCL, IDB_READ, IDB_WRITE, IDB_DISCARD
 };
 
 static void setStatus() {
@@ -336,6 +340,7 @@ static void createPanel(HWND hwnd) {
     mkButton(hwnd, L"!",  IDB_EXCL,  row(1) + W / 2, y, W / 2, H);
     mkButton(hwnd, L"Read",  IDB_READ,  row(2), y, W, H);
     mkButton(hwnd, L"Write", IDB_WRITE, row(3), y, W, H);
+    mkButton(hwnd, L"Scarta (Esc)", IDB_DISCARD, row(4), y, W, H);
 
     setStatus();
 }
@@ -362,6 +367,7 @@ static LRESULT CALLBACK PanelProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 case IDB_EXCL:    performAction(A_EXCL); break;
                 case IDB_READ:    performAction(A_READ); break;
                 case IDB_WRITE:   performAction(A_WRITE); break;
+                case IDB_DISCARD: performAction(A_DISCARD); break;
             }
             return 0;
         }
@@ -382,12 +388,13 @@ static std::string dataPath(const char* name) {
 #endif
 }
 
-// keymap T9 a 9 gruppi mappata su q w e a s d z x c
+// keymap T9 stile cellulare: w e a s d z x c = tasti 2..9 (Spazio = 0 = conferma).
+//   w=2=abc  e=3=def  a=4=ghi  s=5=jkl  d=6=mno  z=7=pqrs  x=8=tuv  c=9=wxyz
 static onehand::KeyMap buildKeymap() {
     onehand::KeyMap km;
-    km.groups[L'q'] = L"abc"; km.groups[L'w'] = L"def"; km.groups[L'e'] = L"ghi";
-    km.groups[L'a'] = L"jkl"; km.groups[L's'] = L"mno"; km.groups[L'd'] = L"pqr";
-    km.groups[L'z'] = L"stu"; km.groups[L'x'] = L"vwx"; km.groups[L'c'] = L"yz";
+    km.groups[L'w'] = L"abc";  km.groups[L'e'] = L"def";  km.groups[L'a'] = L"ghi";
+    km.groups[L's'] = L"jkl";  km.groups[L'd'] = L"mno";  km.groups[L'z'] = L"pqrs";
+    km.groups[L'x'] = L"tuv";  km.groups[L'c'] = L"wxyz";
     return km;
 }
 

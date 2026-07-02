@@ -89,7 +89,8 @@ I tre livelli sono implementati e la prima **versione avviabile** dell'assistent
 - **FE Windows** (`app/windows/`, target `sohw_assistant`): adattatore di solo I/O sopra `motore_core`.
   Pannello (un bottone per funzione + Play/Pause + toggle Assistita/Classica), overlay topmost
   near-mouse con evidenziazione selezionata/aperta e auto-hide a buffer vuoto, hook tastiera
-  `WH_KEYBOARD_LL` (keymap `qweasdzxc` + funzioni), Read/Write via clipboard (+`Ctrl+V`).
+  `WH_KEYBOARD_LL` (keymap stile cellulare `weasdzxc` = tasti 2–9, Spazio = 0; + funzioni;
+  Esc = Scarta), Read/Write via clipboard (+`Ctrl+V`).
 
 **Cablatura scelta**: il FE C++ chiama `motore_core` **direttamente** (niente C ABI dedicata del MOTORE);
 la C ABI del CORE (`smartcore_c`) resta per i linguaggi terzi. Build: `cmake -B build && cmake --build
