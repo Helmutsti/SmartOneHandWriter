@@ -12,8 +12,9 @@ nell'app attiva a richiesta. Deve garantire un comportamento coerente (la logica
 FE) ed essere una *struttura di funzionamento*, non solo un tool di suggerimenti.
 
 ## 2. Decisioni prese (con l'utente)
-- **Ambito**: system-wide. Un tasto di **input/load** legge il testo selezionato da qualunque app nel
-  buffer; **complete** scrive tutto il buffer nell'app attiva e lo svuota. Modello a **buffer canonico**
+- **Ambito**: system-wide. **Read** carica nel buffer il testo **presente nella clipboard** (l'utente
+  copia a mano con `Ctrl+C` prima); **Write** scrive tutto il buffer nell'app attiva (via **clipboard +
+  `Ctrl+V`**, con salvataggio/ripristino della clipboard) e lo svuota. Modello a **buffer canonico**
   (il MOTORE possiede il testo; il FE inietta).
 - **Overlay**: un **box colorato senza bordi né chrome** — solo testo ASCII semplice — vicino al punto di
   digitazione. **Sparisce quando il buffer è vuoto**.
@@ -23,27 +24,35 @@ FE) ed essere una *struttura di funzionamento*, non solo un tool di suggerimenti
   anche un bottone dedicato. In mezzo al testo si usa Conferma da sola.
 - **cancella**: **due tasti separati** ora (un tasto per funzione). Le primitive `DeleteLetter`/
   `DeleteWord` restano atomiche nell'engine; l'eventuale "cancella intelligente" sarà logica FE futura.
-- **load**: il testo caricato è dato per **già completato**; le parole caricate sono *risolte* e possono
-  essere **navigate, cancellate, completate/arricchite** (niente Roll: non hanno codifica T9; per
-  riscriverne una si cancella e si ridigita).
+- **read/load**: il testo caricato è dato per **già completato**; le parole caricate sono *risolte* e
+  possono essere **navigate, cancellate, arricchite** (niente Roll: non hanno codifica T9). Per
+  cambiarne una: `Cancella close` + ridigita. **Non si digita dentro una parola caricata** (D11-ii);
+  arricchire = inserire parole nuove intorno.
 
 ## 3. Componenti UI
 Due superfici **separate**:
 
 ### 3.1 Overlay del buffer (sovraimpressione)
-- Finestra **topmost, senza bordi, click-through**, sfondo colorato pieno, testo ASCII del buffer intero.
-- Evidenziazioni: **parola selezionata** = sfondo colore A; **parola aperta** = sfondo colore B (diverso).
-- **Auto-hide** quando il buffer è vuoto; riappare al primo carattere/`load`.
-- Posizione: sotto/sopra il caret dell'app attiva (vedi §7, questione aperta sul tracking del caret).
+- Finestra **topmost, senza bordi, click-through**, sfondo colorato pieno, testo ASCII del buffer.
+- **Riga singola con scorrimento** (E14): il box resta basso e scorre orizzontalmente per tenere sempre
+  visibile la **parola aperta**.
+- Evidenziazioni (E15, default): sfondo box **grigio scuro semi-trasparente** (~#2B2B2B, ~85%), testo
+  bianco; **parola selezionata** = azzurro tenue (#3A6EA5); **parola aperta** = ambra (#D9A441). Tutto
+  poi configurabile.
+- **Auto-hide** quando il buffer è vuoto; riappare al primo carattere / `Read`.
+- **Posizione: vicino al cursore del mouse** (E13). Il near-caret (via UIA) è rinviato (§11).
 
 ### 3.2 Pannello tasti (finestra separata)
 Un **bottone per funzione** (vedi §4) + un **Play/Pause** che attiva/disattiva intercettazione+overlay.
 Quando in pausa, i tasti passano all'app normalmente.
+- **Ora**: tutte le funzioni sono su **bottoni**; Play/Pause **solo bottone UI**.
+- **Rinviato (§11)**: attivazione delle funzioni **solo da tastiera** (obiettivo per l'uso a una mano),
+  eventuale **doppio-tap** di un tasto per funzioni extra, e **hotkey globale** per Play/Pause.
 
 ## 4. Funzioni → azioni dell'engine
 | Bottone | Comportamento | Azione engine |
 |---|---|---|
-| Naviga ◀ / ▶ | sposta la **selezione** tra le parole (frecce) | `NavigatePrev` / `NavigateNext` |
+| Naviga ◀ / ▶ | sposta la **selezione** tra i token, **inclusa la punteggiatura** (l'apostrofo resta dentro la parola, vedi piano 04 §1.1) | `NavigatePrev` / `NavigateNext` |
 | Apri/Edit | evidenzia la parola selezionata e abilita **digitazione/Roll** | `OpenSelected` |
 | Roll | cicla i suggerimenti della parola **aperta** | `Roll` |
 | Cancella open | parola **aperta**: cancella **una lettera** | `DeleteLetter` |
@@ -64,17 +73,33 @@ Scelta utente: **assistita** o **classica**.
   **tastierino numerico** (`2..9`) oppure **`q,w,e,a,s,d,z,x,c`** (9 tasti → 9 gruppi). Il FE traduce il
   tasto fisico nel simbolo/gruppo e lo manda all'engine (che disambigua col dizionario+contesto).
 - **Classica**: i tasti sono lettere dirette; l'engine usa il CORE in modalità Literal (completamento per
-  prefisso); Roll cicla i completamenti. Conferma chiude la parola.
+  prefisso). Il **Roll cicla i completamenti**, ma il **primo elemento è sempre il testo digitato**
+  (letterale): `Conferma` **senza** rollare mantiene ciò che hai scritto; rollare + `Conferma` scrive il
+  completamento scelto (B6).
 
-La mappa **tasto fisico → gruppo/lettera** è configurabile (default proposti sopra).
+La mappa **tasto fisico → gruppo/lettera deve essere configurabile** (F16). **Per ora** si usa il blocco
+**`q w e a s d z x c`** come default fisso; l'**editor di mapping** (UI per rimappare tasti↔gruppi, e il
+preset numpad) è **rinviato** (§11).
+
+**Punteggiatura e spazi (G19):**
+- **Spazi**: non si digitano — lo spazio tra parole è derivato al render; a una nuova parola ci si arriva
+  con **Avanti** / **Conferma continua**.
+- **Punteggiatura**: **tasti dedicati** per i segni frequenti (almeno `.` `,` `?` `!`) che inseriscono un
+  token `Punct`; i segni meno comuni via **modalità simboli** (set esatto rifinibile). Premere un segno
+  **conferma** l'eventuale parola aperta e aggiunge il token; se il segno è **terminale** (`. ! ?`)
+  scatta la **Conferma continua** (fine frase, §3 del piano 04).
+- **Apostrofo**: non si digita — arriva dalle parole elise del dizionario (Strategia A, §1.1 piano 04).
 
 ## 6. Interception & I/O (cuore del FE Windows)
 - **Hook tastiera low-level** (`WH_KEYBOARD_LL`): quando attivo (Play), intercetta i tasti mappati e li
   traduce in azioni/lettere per l'engine invece di inviarli all'app; i tasti non mappati passano.
-- **Iniezione** (`SendInput`) su `Write`: scrive il testo del buffer nell'app attiva (con firma
-  sugli eventi iniettati per non ri-catturarli, come nel legacy `main_win32.cpp`).
-- **Read**: legge il **testo selezionato** dall'app attiva. Approccio proposto: simulare `Ctrl+C` e
-  leggere la **clipboard** (semplice, universale), poi tokenizzare nel buffer come parole risolte.
+- **Iniezione** su `Write` (deciso D12 = **clipboard + incolla**): l'engine rende il buffer in stringa
+  (regole §1.1), il FE **salva** la clipboard corrente, ci mette il testo, simula **`Ctrl+V`** (via
+  `SendInput`, con firma sugli eventi iniettati) e **ripristina** la clipboard. Nessuna digitazione
+  carattere-per-carattere.
+- **Read** (deciso D10 = opzione 3): legge il **testo attualmente nella clipboard** (l'utente ha copiato
+  a mano con `Ctrl+C`), poi tokenizza nel buffer come parole risolte (Strategia A, §1.1 del piano 04).
+  Nessuna simulazione di tasti né UIA. (UIA per selezione+caret resta una possibile evoluzione futura.)
 - **Play/Pause**: installa/rimuove l'hook e mostra/nasconde overlay+pannello.
 
 ## 7. Rendering & stato
@@ -83,12 +108,11 @@ confini di parola + indice selezionato + indice aperto) e colora di conseguenza.
 piano 04.
 
 ## 8. Assunzioni e questioni aperte
-- **Posizione del caret** dell'app esterna: ottenerla system-wide è non banale (`GetGUIThreadInfo` /
-  UIA). *Assunzione MVP*: overlay in posizione ancorata (es. vicino al cursore mouse o posizione fissa
-  configurabile), con tracking del caret come miglioria successiva.
-- **Load via clipboard**: usa `Ctrl+C`+clipboard (semplice) invece di UIA. Da confermare se accettabile.
-- **Digitare quando nessuna parola è aperta**: *assunzione* → apre automaticamente una nuova parola
-  (equivale a `Insert` implicito) così si può iniziare a digitare.
+- **Posizione overlay** (deciso E13): **vicino al cursore del mouse**. Il near-caret (via UIA) è
+  rinviato (§10).
+- ~~Load via clipboard~~ → **deciso (D10, opzione 3)**: `Read` legge la clipboard corrente (copia manuale).
+- **Digitare quando nessuna parola è aperta** → apre automaticamente una nuova parola (confermato B4).
+- **`Avanti`/nuova parola** viene creata **subito dopo** la parola corrente/selezionata (confermato B5).
 - **Toolkit UI**: Win32 puro (coerente col repo, zero dipendenze; overlay = `WS_EX_LAYERED |
   WS_EX_TRANSPARENT | WS_EX_TOPMOST`). Da confermare vs alternativa.
 
@@ -101,6 +125,16 @@ piano 04.
 5. Toggle assistita/classica; configurazione mappa tasti.
 6. Rifiniture: posizione overlay/caret, persistenza config.
 
-## 10. Puntatori
+## 10. Rinviato / evoluzioni future (FE)
+- **Editor di mapping tasti** (UI per rimappare fisico↔gruppo/funzione) + preset **numpad** (F16).
+- **Attivazione delle funzioni solo da tastiera** — obiettivo finale per l'uso a una mano (i bottoni
+  restano come fallback/debug) (F17).
+- **Doppio-tap** di un tasto per funzioni aggiuntive (da valutare) (F17).
+- **Hotkey globale** per Play/Pause (F18).
+- **Overlay near-caret** e **`Read`/selezione via UIA** (posizione del cursore dell'app) (E13/D10).
+- **Iniezione incrementale** in-app via `Effects`/diff (oggi `Write` è "a blocco" via clipboard).
+- **Maiuscole** (G20): auto a inizio frase (dopo `. ! ?`) + tasto "Maiuscola" manuale; per ora tutto minuscolo.
+
+## 11. Puntatori
 - Architettura: `docs/ARCHITETTURA.md`. Engine: `docs/plans/04-engine-state-improvements.md`.
 - CORE (già pronto, in pausa): `docs/CORE-nuova-concezione.md`.

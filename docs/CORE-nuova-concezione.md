@@ -552,6 +552,10 @@ Lo sviluppo del CORE è **sospeso** dopo M1–M7 + gruppo A + blocchi ad alta pr
     smoothing vero (Kneser-Ney/backoff) al posto dell'interpolazione lineare.
   - Esporre i parametri (`pesi`, `topK`, `nextN`, filtro punteggiatura, completamento, skip-punteggiatura)
     da `config.json` (oggi solo via API `Core::set*`).
+  - Allineare il **tokenizer del CORE** alla Strategia A degli apostrofi del MOTORE (split *dopo*
+    l'apostrofo: `dell'aria` → `dell'` + `aria`), per coerenza con il documento del MOTORE
+    (vedi `docs/plans/04-engine-state-improvements.md` §1.1). Oggi il CORE tiene l'apostrofo word-internal
+    senza splittare.
   - Frontend: compilare la GUI **Qt** (serve Qt6); la GUI **Win32** è solo un banco (mostra il next del
     solo match in cima, niente click-per-scegliere, non ridimensionabile); **macOS** non allineato al CORE.
   - Disallineamento sorgenti: unigrammi (OpenSubtitles) vs bigrammi (file 2009) — euristico.

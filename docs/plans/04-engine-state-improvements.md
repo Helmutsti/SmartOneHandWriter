@@ -11,6 +11,7 @@
 - **Word**:
   - `state ∈ {Open, Resolved}`
   - `origin ∈ {Typed, Loaded}`
+  - `cls ∈ {Text, Punct}` — parola vera o token di punteggiatura
   - `cells` = tasti/gruppi premuti (solo per parole *Typed* editabili col Roll)
   - `cands` + `idx` = candidati e selezione corrente (parola Open)
   - `text/glyphs` = forma mostrata
@@ -19,18 +20,32 @@
   - `open` = indice della parola **aperta** in editing, oppure nessuno
   - Invariante: al più **una** parola Open; quando è aperta, di norma `sel == open`.
 
+## 1.1 Tokenizzazione & spaziatura (regole)
+- **Token = parola (Text) o punteggiatura (Punct)**, entrambi `Word` distinti. La **navigazione include
+  anche la punteggiatura** (C7): le frecce scorrono tutti i token.
+- **Apostrofo — Strategia A (elisione)**: l'apostrofo è **word-internal** ma **termina** il token di
+  sinistra (split *dopo* l'apostrofo, che resta attaccato). Es. `dell'aria` → `["dell'", "aria"]` (due
+  token, non tre). Combacia col dizionario/bigrammi (`dell'`, `l'`, …) e in T9 `dell'` compare come
+  completamento del codice `d-e-l-l` (l'apostrofo è oltre le lettere digitate).
+- **Spaziatura al render/iniezione** (gli spazi NON sono memorizzati, sono derivati da regole):
+  - spazio singolo tra due token Text;
+  - **nessuno spazio dopo un token che finisce in apostrofo** (elisione → `dell'aria`);
+  - **nessuno spazio prima** della punteggiatura di chiusura (`. , ; : ! ?` `)` `»`) e **nessuno spazio
+    dopo** quella di apertura (`(` `«`); (regole standard, da rifinire).
+
 ## 2. Azioni (API dell'engine) — atomiche + una combo
 | Azione | Effetto |
 |---|---|
 | `NavigatePrev` / `NavigateNext` | (auto-conferma l'eventuale parola aperta, vedi §3) e sposta `sel` |
-| `OpenSelected` | apre `sel` per l'editing (`open=sel`, `state=Open`): abilita digitazione/Roll |
+| `OpenSelected` | apre `sel` per l'editing (`open=sel`, `state=Open`): abilita digitazione/Roll. Su parola **Loaded**: solo evidenziazione + cancellazione (niente Roll né digitazione, §D11) |
 | `Roll` | cicla `cands` della parola aperta (solo Typed) |
 | `DeleteLetter` | sulla parola **aperta**: rimuove l'ultima cella; se vuota → rimuove la parola |
 | `DeleteWord` | sulla parola **chiusa** selezionata: rimuove l'intera parola |
 | `Confirm` | chiude la parola aperta (`state=Resolved`), **senza spostarsi né creare** |
-| `Advance` | dopo la conferma: crea+apre una **nuova parola vuota a destra** (`open=nuova`) |
+| `Advance` | dopo la conferma: crea+apre una **nuova parola vuota subito a destra** della corrente (`open=nuova`) |
 | `ConfirmContinue` | **combo** `Confirm`+`Advance`; automatica a fine frase, o esplicita (§3) |
-| `TypeKey(sym)` | se nessuna parola è aperta → apre una nuova parola; poi appende `sym` e ricalcola i candidati via CORE |
+| `TypeKey(sym)` | se nessuna parola è aperta → apre una nuova parola; poi appende `sym` e ricalcola i candidati via CORE. **Ignorato** se la parola aperta è Loaded (§D11: prima `DeleteWord`) |
+| `Punct(sym)` | conferma l'eventuale parola aperta e inserisce un token **Punct**; se `sym` è terminale (`. ! ?`) applica la **Conferma continua** (§3) |
 | `Read(text)` | importa testo (già completato) come parole **Resolved/Loaded** nel buffer |
 | `Write` | conferma l'aperta, restituisce il testo completo e **svuota** il documento |
 
@@ -44,13 +59,16 @@ Modello (dalla lista bottoni aggiornata dall'utente):
   (proseguire in coda). È il "avanti".
 - **`ConfirmContinue`** = `Confirm` + `Advance` come **combo**. Scatta **in automatico a fine frase**
   (la frase è delimitata da punteggiatura `. ! ?`), ed è anche un **bottone** esplicito.
-- **In mezzo** al testo si usa `Confirm` da solo (chiude e basta); per proseguire in coda si usa
-  `Advance` o la conferma continua automatica.
+- **In mezzo** al testo si usa `Confirm` da solo (chiude e basta): la **selezione resta** sulla parola
+  appena confermata (C9), nessuno spostamento. Per proseguire in coda si usa `Advance` o la conferma
+  continua automatica; per spostarsi si naviga con le frecce.
 - **Navigare via** da una parola aperta la **auto-conferma** (`Confirm`) senza creare.
 
-⚠️ Micro-questione residua: la conferma continua **automatica** scatta (a) solo quando la parola è a
-**fine buffer**, oppure (b) a **ogni confine di frase interno** (quando si completa una frase con
-punteggiatura terminale anche in mezzo al testo)? Da chiudere prima dell'implementazione.
+**Trigger dell'automatismo (deciso: ogni confine di frase).** La conferma continua automatica scatta a
+**ogni fine frase**, non solo a fine buffer: quando la parola confermata **completa una frase** —
+operativamente, quando è **seguita da punteggiatura terminale** (`. ! ?`) o è a **fine buffer**. In quel
+caso `Confirm` diventa `ConfirmContinue` (Confirm+Advance) e apre la parola successiva. Altrove
+(parola non a fine frase) `Confirm` chiude soltanto.
 
 ## 4. Integrazione col CORE (`sohw::Core`)
 Per la parola **aperta**, l'engine costruisce ed interroga il CORE:
@@ -59,6 +77,10 @@ Per la parola **aperta**, l'engine costruisce ed interroga il CORE:
 - `mode`          = assistita → `InputMode::T9`; classica → `InputMode::Literal`.
 - Risultato: `matches` → `word.cands` (per il Roll); `nextByMatch` → (futuro) striscia di parole
   successive suggerite.
+- **Classica (Literal), regola "letterale primo" (B6)**: il MOTORE mette il **testo digitato** come
+  `cands[0]`, poi i completamenti del CORE. `Confirm` risolve al candidato corrente (`idx`): senza Roll
+  resta il letterale. (In T9 non si applica: i candidati sono parole del dizionario per frequenza/contesto.)
+  Nota: si può in futuro spostare l'opzione "letterale primo" dentro il CORE (`LiteralCandidateProvider`).
 
 ## 5. Modello di render (novità per l'overlay)
 L'engine espone un **render strutturato** per il box in sovraimpressione (il FE non calcola nulla):
@@ -66,8 +88,10 @@ L'engine espone un **render strutturato** per il box in sovraimpressione (il FE 
 - per ogni parola lo **stato di evidenziazione**: `normale | selezionata | aperta`;
 - così il FE colora "selezionata" (colore A) e "aperta" (colore B).
 
-È **distinto** dal contratto `Effects`/diff usato per l'**iniezione** su `Complete` (N backspace +
-inserimento verso l'app esterna). Overlay = mostra il buffer; Effects = scrive nell'app.
+È **distinto** dall'**iniezione** su `Write`: il MOTORE rende il buffer in **stringa completa** (regole
+§1.1) e il FE la scrive nell'app via **clipboard + `Ctrl+V`** (D12). Overlay = mostra il buffer; Write =
+stringa da incollare. Il contratto `Effects`/diff (N backspace + inserimento) resta previsto per una
+futura **iniezione incrementale** in-app, non usato dall'attuale `Write` "a blocco".
 
 ## 6. Miglioramenti estratti (vs legacy `engine.cpp`)
 1. **Selezione vs Apertura separate** (`sel` ≠ `open`): il legacy confondeva navigazione e apertura
@@ -86,25 +110,28 @@ inserimento verso l'app esterna). Overlay = mostra il buffer; Effects = scrive n
 
 ## 7. C ABI del MOTORE
 Estende il contratto FFI: azioni (`NavigatePrev/Next`, `OpenSelected`, `Roll`, `DeleteLetter`,
-`DeleteWord`, `Confirm`, `Advance`, `ConfirmContinue`, `TypeKey`, `Read`, `Write`), lettura del
+`DeleteWord`, `Confirm`, `Advance`, `ConfirmContinue`, `TypeKey`, `Punct`, `Read`, `Write`), lettura del
 **render model** (conteggio parole,
-testo, stato per-parola, indici `sel`/`open`) e degli `Effects` di iniezione su `Complete`. Da valutare
-se sopra il legacy `onehand_c.h` (rinumerazione vietata) o un nuovo `motore_c.h` versionato.
+testo, stato per-parola, indici `sel`/`open`) e della **stringa completa** restituita da `Write` (che il
+FE incolla via clipboard). Da valutare se sopra il legacy `onehand_c.h` (rinumerazione vietata) o un
+nuovo `motore_c.h` versionato.
 
 ## 8. Questioni aperte (da chiudere in implementazione)
-- **§3**: trigger della **conferma continua automatica** — solo a fine buffer o a ogni confine di frase
-  interno? Definizione operativa di "fine frase". *(priorità 1)*
-- **Editing di parole Loaded**: senza `cells` niente Roll; editarle = cancella+ridigita (diventano
-  Typed) oppure `DeleteWord`. Confermare il comportamento di `OpenSelected` su parola Loaded.
+- ~~**§3** trigger conferma continua~~ → **deciso**: a ogni fine frase (parola seguita da `. ! ?` o fine
+  buffer).
+- ~~Editing di parole Loaded~~ → **deciso (D11)**: `OpenSelected` su Loaded = evidenzia + consente solo
+  `DeleteLetter`/`DeleteWord` (Roll no-op). **Non si digita** dentro una Loaded (opzione ii): per
+  cambiarla `DeleteWord` + ridigita (diventa Typed, con Roll). Arricchire = inserire parole intorno.
 - **Navigazione con parola aperta**: conferma-e-muovi (assunto) vs vietato.
 - **Punteggiatura come parole**: se e come il MOTORE gestisce i segni (il CORE li tokenizza già).
-- **Capitalizzazione** (A6 del CORE): inizio frase / nomi propri → responsabilità del MOTORE al render.
+- **Capitalizzazione** → **rinviata** (G20): per ora tutto minuscolo; in futuro auto a inizio frase +
+  tasto "Maiuscola" manuale (responsabilità del MOTORE al render).
 
 ## 9. Milestone (proposta)
 1. Modello dati + due cursori + render model; test headless (senza GUI).
 2. Azioni di navigazione/apertura/roll + integrazione `sohw::Core` per i candidati.
 3. `TypeKey` + `Confirm`/`Advance`/`ConfirmContinue` (§3) + cancellazioni; test dei percorsi.
-4. `Read` (parse testo → parole Resolved) e `Write` (testo + `Effects` di iniezione).
+4. `Read` (parse testo → parole Resolved) e `Write` (stringa completa resa; il FE incolla via clipboard).
 5. C ABI del MOTORE + driver di test headless.
 6. Cablatura col FE Windows (piano 03).
 
