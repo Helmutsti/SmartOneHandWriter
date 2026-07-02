@@ -1,11 +1,35 @@
 # SmartOneHandWriter — CORE (nuova concezione)
 
-> Documento di progettazione completo e auto-contenuto. Cattura **tutto** ciò che è stato
-> discusso e deciso, incluse le motivazioni e l'evoluzione delle idee, così da poter riprendere
-> il lavoro in qualsiasi momento senza perdere informazioni.
+> Documento di progettazione **e** di stato, completo e auto-contenuto. Cattura **tutto** ciò che è
+> stato deciso, implementato e come funziona, incluse motivazioni ed evoluzione delle idee, così da
+> poter riprendere in una **nuova sessione** senza perdere informazioni.
 >
-> Branch: `nuova-concezione`. Stato working tree al momento della stesura: **vuoto su disco**
-> (tutti i file tracciati sono in HEAD, cancellati nel working tree → serve `git restore .`).
+> Branch: `nuova-concezione`. Stato: **CORE completo (M1–M7), committato** (`45cd8e3`), 6/6 test verdi,
+> GUI Win32 funzionante. §§1–19 = progettazione e razionale; **§20 = funzionamento e stato reale**;
+> **§21 = come riprendere + prossimi passi** (leggi prima queste due se stai ricominciando).
+
+---
+
+## 0. Ripresa rapida (TL;DR)
+
+- **Cos'è**: il CORE (namespace `sohw`) è un motore **stateless** che, dato un *contesto* (testo a
+  sinistra/destra di uno slot) e una *parola codificata*, restituisce (3) i **match** decodificati e
+  ordinati per contesto e (4) un **ventaglio di parole successive** per ciascun match. Il "MOTORE"
+  (macchina a stati, `engine.cpp`) è separato e **rinviato**.
+- **Idea centrale**: *il match è una predizione vincolata* → un unico `IPredictor` (a bigrammi) fa sia
+  la disambiguazione del match sia il next-word. Il matching (T9 o digitazione classica) è
+  intercambiabile e attivabile/disattivabile.
+- **Build** (CMake di VS2022 + MSVC; ⚠️ usare un path di build **corto** per via di MAX_PATH):
+  ```
+  cmake -S <repo> -B C:\shwb
+  cmake --build C:\shwb --config Release
+  ```
+- **Test** (6/6): `ctest --test-dir C:\shwb\core -C Debug` (prima builda i target di test in Debug).
+- **Provalo** — GUI: `C:\shwb\gui\win32\Release\sohw_gui_win32.exe` · CLI:
+  `echo "per | | 52" | C:\shwb\cli\Release\sohw_cli.exe data\wordlist_it.txt data\it.bigrams.bin`
+- **Dato bigrammi**: il binario `data/it.bigrams.bin` è **gitignorato** (rigenerabile, ~20 MB). Se manca,
+  rigeneralo (vedi §20 "Rigenerare il modello"): il CORE funziona lo stesso senza (ranking per sola
+  frequenza, niente next-word).
 
 ---
 
@@ -366,46 +390,136 @@ operativo di §10–§16). Prossimo passo alla ripresa: **`git restore .`**, poi
 
 ---
 
-## 20. Stato dell'implementazione (aggiornato)
+## 20. Funzionamento e stato reale (fonte di verità)
 
-Milestone M1–M6 **completate e testate**; M7 (GUI Qt) **scritta ma non compilabile qui** (Qt6 assente).
+### 20.1 Stato milestone
+| # | Milestone | Stato |
+|---|-----------|-------|
+| M1 | Scaffolding `sohw_core` + tipi + CMake | ✅ testato |
+| M2 | `Dictionary` `len ≥ n` + lookup prefisso | ✅ testato |
+| M3 | `ICandidateProvider` (T9 + Literal) | ✅ testato |
+| M4 | Tool `build_bigrams` → binario compatto | ✅ generato (19.7 MB) |
+| M5 | `BigramModel` + `BigramPredictor` | ✅ testato |
+| M6 | `Core::process` + C ABI `smartcore_c` | ✅ testato |
+| M7 | GUI a 4 input + toggle | ✅ **Win32** compilata/eseguita; **Qt** pronta (non compilata: Qt6 assente) |
 
-### Build
-- Toolchain: CMake (quello incluso in Visual Studio 2022) + MSVC. CMake/compilatori NON sono nel PATH.
-- ⚠️ **Path di build corto obbligatorio**: MSBuild FileTracker supera MAX_PATH con path lunghi (es. lo
-  scratchpad). Build usata: `C:\shwb`.
-- Configura: `cmake -S <repo> -B C:\shwb`
-- Test: build dei target test + `ctest --test-dir C:\shwb\core -C Debug`. **6/6 verdi**:
-  `engine_tests` (legacy), `sohw_tests` (pipeline+integrazione reale), `dict_tests`, `provider_tests`,
-  `bigram_tests` (hermetico + reale), `abi_tests` (C ABI).
+Committato in `45cd8e3` sul branch `nuova-concezione` (34 file, +2368 righe). Il resto (MOTORE a stati,
+BERT) è rinviato — vedi §21.
 
-### Cosa è stato realizzato
-- **CORE**: `core/src/sohw/` — `types.hpp`, `core.{hpp,cpp}`, `candidate_provider.{hpp,cpp}`
-  (`T9CandidateProvider`, `LiteralCandidateProvider`), `predictor.hpp` (IPredictor UTF-8+score),
-  `bigram_model.{hpp,cpp}`, `bigram_predictor.{hpp,cpp}`, `bigram_format.hpp`.
-- **Riuso/modifica**: `dictionary.{hpp,cpp}` (+`computeCandidatesPrefix` len≥n, +`completionsOf` prefisso);
-  `utf8.{hpp,cpp}` (+`wToUtf8`).
-- **C ABI**: `core/include/sohw/smartcore_c.h` + `core/src/sohw/smartcore_c.cpp`. Shared opt-in
-  `-DSOHW_BUILD_C_ABI=ON` (auto-export simboli su MSVC, verificato con dumpbin).
-- **Tool**: `tools/build_bigrams/` → `data/it.bigrams.bin` (19.7 MB, K=64, minCount=2). Generazione:
-  ``"/c/Program Files/7-Zip/7z.exe" x -so it.word.bigrams.7z | build_bigrams data/wordlist_it.txt - data/it.bigrams.bin`` (~21 s, pipe binary-safe via bash; niente file da 1.2 GB su disco).
-- **Harness da terminale** (NUOVO, zero deps): `cli/` → `sohw_cli`. Legge `left | right | encoded [ | mode]`
-  e stampa match + next-word. Usato per validare il CORE senza GUI.
-- **GUI Qt**: `gui/qt/` (main.cpp + CMake). Opt-in, si **auto-salta** se Qt6 assente
-  (`find_package(Qt6 QUIET)`). Non compilata qui (Qt6 non installato); resta pronta.
-- **GUI Win32** (NUOVA, scelta dall'utente in mancanza di Qt): `gui/win32/main.cpp` — nativa, zero
-  dipendenze, 4 campi + checkbox T9/Classico, UTF-8↔UTF-16 ai bordi, cablata a `sohw_core`.
-  Target `sohw_gui_win32` (solo WIN32). **Compilata ed eseguita**: mostra correttamente match
-  (`per`+`52`→"la" 0.2213) e next-word — verificata anche via screenshot.
+### 20.2 Mappa dei file (cosa fa cosa)
+```
+core/src/sohw/
+  types.hpp              Context{left,right}, InputMode{T9,Literal}, Suggestion{word,score}, CoreResult
+  core.{hpp,cpp}         Core: facade stateless. Possiede dict, model, i 2 provider e il predittore.
+                         process() = pipeline; tokenize() spezza il contesto in parole minuscole.
+  candidate_provider.hpp ICandidateProvider + T9CandidateProvider + LiteralCandidateProvider
+  candidate_provider.cpp   T9: simbolo->KeyMap.groupOf->Dictionary.computeCandidatesPrefix (len>=n)
+                           Literal: Dictionary.completionsOf(prefisso) oppure passthrough
+  predictor.hpp          PredictContext{leftWords,rightWords,sentenceStart} + IPredictor (UTF-8+score)
+  bigram_model.{hpp,cpp} BigramModel: legge il binario CSR; count(w1,w2), rowTotal(w1), successors(w1,N)
+  bigram_predictor.*     BigramPredictor: rankCandidates (P(cand|prev)+backoff freq), predictNext
+  bigram_format.hpp      magic "SHWB", versione; layout del binario (condiviso col tool)
+  smartcore_c.cpp        implementazione del C ABI (wrapper su Core)
+core/include/sohw/
+  smartcore_c.h          C ABI pubblico (UTF-8): sc_create/set_mode/load_*/process/match_*/next_*/free
+core/src/                (riuso/modifica del core esistente "onehand")
+  dictionary.{hpp,cpp}   +computeCandidatesPrefix(len>=n), +completionsOf(prefisso). Storage unigram+freq.
+  utf8.{hpp,cpp}         utf8ToW (esistente) + wToUtf8 (nuovo). Conversioni ai bordi.
+  config.cpp/types.hpp   KeyMap T9 (defaultT9KeyMap, groupOf), Config, parseConfig (riusati)
+tools/build_bigrams/     preprocessing offline: CP1252->UTF-8, vocab, pruning -> data/it.bigrams.bin
+cli/                     sohw_cli: banco di prova da terminale (stdin: "left | right | encoded [| mode]")
+gui/win32/               sohw_gui_win32: GUI nativa Win32 (4 campi + checkbox), cablata a sohw_core
+gui/qt/                  sohw_gui: GUI Qt6 (opt-in, si auto-salta senza Qt6)
+docs/CORE-nuova-concezione.md   questo documento
+```
+Il **MOTORE** legacy resta intatto e NON usato dal CORE: `engine.{hpp,cpp}`, `onehand_c.*`,
+`predictor_frequency.cpp`, `ngram_predictor.*`, `platform/windows/main_win32.cpp`, `platform/macos`.
 
-### Verifica dal vivo (sohw_cli sui dati reali)
-- `per | | 52` → **la** (score 0.2213), next-word: sua/prima/mia… → contesto applicato.
-- `| | citt | literal` → **città, cittadini…** (accenti UTF-8 corretti).
-- `| | 7653` → soldi/sole/soldato…
+### 20.3 Come funziona una chiamata (`Core::process(ctx, encoded, topK, nextN)`)
+1. **Tokenizza** `ctx.left`/`ctx.right` in parole minuscole (split sugli spazi). `prev` = ultima parola
+   di `left`; `sentenceStart` = `left` vuoto.
+2. **Candidati** dal provider secondo la modalità (`cfg.maxCandidates`, default 8):
+   - **T9**: ogni simbolo → gruppo di lettere (`KeyMap::groupOf`), poi `Dictionary::computeCandidatesPrefix`
+     restituisce le parole reali con `len ≥ n` i cui primi `n` caratteri stanno nei gruppi.
+   - **Literal**: `Dictionary::completionsOf(prefisso)` (parole che iniziano col testo digitato), oppure,
+     in passthrough, la parola così com'è.
+3. **Ranking contestuale** (`BigramPredictor::rankCandidates`): per ogni candidato `score = P(cand|prev)`
+   = `count(prev,cand)/rowTotal(prev)`; `stable_sort` per conteggio bigramma desc. I candidati **senza
+   bigramma restano nell'ordine per frequenza del provider** (backoff), con score 0. → `matches` (3).
+4. **Next-word**: per i primi `topK` match, si crea un contesto con il match in coda a `leftWords` e si
+   chiama `predictNext` → i `successors(match, nextN)` del modello, con score = `count/rowTotal`.
+   → `nextByMatch` (4), un vettore per ciascun match (la GUI mostra quello del match in cima).
+5. **Senza modello caricato** (o `prev` sconosciuto): rank = ordine del provider (score 0), next vuoto.
+   Il CORE resta quindi utilizzabile con la sola wordlist.
 
-### Punti di tuning noti
-- **Punteggiatura nel next-word**: i token `, . :` dominano `predictNext` (sono nel file bigrammi).
-  Per la GUI conviene un filtro opzionale della punteggiatura nei suggerimenti next-word.
-- **Score dei match senza contesto = 0**: senza `prev` (o bigramma) il ranking resta per frequenza
-  (ordine del provider) con score 0. Atteso; il segnale contestuale entra con `prev` noto.
-- Parametri pruning bigrammi (K=64, minCount=2) tarabili rigenerando il binario.
+### 20.4 Formato del binario bigrammi (`data/it.bigrams.bin`)
+CSR little-endian (dettaglio in `core/src/sohw/bigram_format.hpp`): magic `SHWB`, versione, `topK`,
+`minCount`, `V`; poi la tabella vocabolario (`uint16 len` + bytes UTF-8, id = indice); poi
+`offsets[V+1]` e le coppie `(uint32 w2_id, uint32 count)` — ogni riga ordinata per conteggio desc.
+Consuntivo generazione reale: 66M righe lette → 13.2M coppie in-vocab → **2.38M dopo pruning**
+(K=64, minCount=2) → **19.7 MB** in ~21 s.
+
+### 20.5 Build / test / run (comandi esatti)
+- CMake è quello di VS2022: `C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe` (idem `ctest.exe`). NON sono nel PATH.
+- ⚠️ **Path di build corto** (`C:\shwb`): MSBuild FileTracker supera MAX_PATH con path lunghi (es. scratchpad) → errore `FTK1011`.
+- Configura: `cmake -S <repo> -B C:\shwb` (opzioni: `-DSOHW_BUILD_C_ABI=ON` per la DLL C ABI).
+- Build tutto: `cmake --build C:\shwb --config Release` (o `--target sohw_gui_win32`, `sohw_cli`, ecc.).
+- Test: builda in Debug e `ctest --test-dir C:\shwb\core -C Debug` → **6/6**: `engine_tests` (legacy),
+  `sohw_tests` (pipeline + integrazione reale), `dict_tests`, `provider_tests`, `bigram_tests`
+  (hermetico + reale), `abi_tests` (C ABI).
+- GUI: `C:\shwb\gui\win32\Release\sohw_gui_win32.exe` (dati letti da `SOHW_DATA_DIR` = `<repo>/data`).
+- CLI: `echo "per | | 52" | C:\shwb\cli\Release\sohw_cli.exe data\wordlist_it.txt data\it.bigrams.bin`.
+
+### 20.6 Rigenerare il modello bigrammi
+Serve l'archivio `it.word.bigrams.7z` (fuori repo, es. sul Desktop) e 7-Zip
+(`C:\Program Files\7-Zip\7z.exe`). Da **bash** (pipe binary-safe, niente file da 1.2 GB su disco):
+```
+"/c/Program Files/7-Zip/7z.exe" x -so /c/.../it.word.bigrams.7z \
+  | /c/shwb/tools/build_bigrams/Release/build_bigrams.exe data/wordlist_it.txt - data/it.bigrams.bin
+```
+Argomenti tool: `build_bigrams <wordlist> <bigrams|-> <out.bin> [K=64] [minCount=2]`.
+
+### 20.7 Verifica dal vivo (osservata)
+- `per | | 52` → **la** (score 0.2213); next-word: *sua/prima/mia/loro/commissione/vita* (contesto applicato).
+- `| | citt | literal` → **città, citta, cittadini, cittadino…** (accenti UTF-8 corretti).
+- `| | 7653` (T9 di "sole") → *soldi, sole, soldato…*
+- GUI Win32: schermata verificata (i 4 campi mostrano gli stessi risultati).
+
+### 20.8 Punti di tuning / comportamenti noti
+- **Punteggiatura nel next-word**: `, . :` dominano `predictNext` (sono token del file bigrammi). Per la
+  GUI conviene un **filtro opzionale** della punteggiatura nei suggerimenti next-word (non ancora fatto).
+- **Score match senza contesto = 0**: senza `prev`/bigramma il ranking resta per frequenza (score 0).
+- **Accenti in T9**: i gruppi T9 non contengono lettere accentate; le parole accentate emergono via
+  prefisso (modalità Literal) o resterebbero da gestire con le `alterations` (rinviato).
+- Pruning bigrammi (K=64, minCount=2) tarabile rigenerando il binario.
+
+---
+
+## 21. Come riprendere in una nuova sessione + prossimi passi
+
+### 21.1 Ripresa a freddo (checklist)
+1. Sei sul branch `nuova-concezione`; i file sono committati (`45cd8e3`). `git status` per eventuali
+   modifiche non salvate.
+2. Se manca `data/it.bigrams.bin` (è gitignorato): rigeneralo (§20.6) **oppure** procedi senza (ranking
+   per sola frequenza, niente next-word).
+3. Configura e builda con path corto (§20.5), esegui `ctest` per confermare 6/6.
+4. Prova GUI/CLI (§0). Leggi §20.3 per capire il flusso di `process()`.
+
+### 21.2 Lavori piccoli già individuati
+- **Filtro punteggiatura** nel next-word (opzione in `BigramPredictor::predictNext` o in `Core`): saltare
+  i token di punteggiatura tra i successori. Migliora subito la UX dei suggerimenti (4).
+- **Alterazioni accenti** in T9 (riusare `alterations.*`): oggi le parole accentate non matchano i codici
+  numerici; valutare se aggiungere varianti accentate ai candidati T9.
+- **Config runtime** dei parametri (topK, nextN, completamento vs passthrough) via `config.json`.
+
+### 21.3 Prossimi pezzi grandi (dal piano originale)
+- **Backend BERT** dietro `IPredictor` (ONNX + tokenizer): nuova classe che implementa
+  `rankCandidates`/`predictNext`; nessuna modifica a Core/provider. Sblocca contesto bidirezionale.
+- **Il MOTORE**: la macchina a stati che *usa* questo CORE per controllare il testo (inserimento,
+  conferma, Roll, cancellazioni…). È la fase esplicitamente rinviata; il CORE è progettato per essere
+  pilotato dall'esterno (stateless) proprio per questo.
+
+### 21.4 Puntatori
+- Piano operativo: `~/.claude/plans/twinkling-snuggling-feather.md`.
+- Memoria di sessione: `…/memory/core-nuova-concezione.md` (+ indice `MEMORY.md`).
+- Commit di riferimento: `45cd8e3`.
