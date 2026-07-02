@@ -25,7 +25,8 @@ struct Reader {
 } // namespace
 
 bool BigramModel::load(const std::string& path) {
-    vocab_.clear(); id_.clear(); offsets_.clear(); w2_.clear(); cnt_.clear();
+    vocab_.clear(); id_.clear(); uni_.clear(); uniTotal_ = 0;
+    offsets_.clear(); w2_.clear(); cnt_.clear();
 
     std::ifstream f(path, std::ios::binary);
     if (!f) return false;
@@ -54,6 +55,10 @@ bool BigramModel::load(const std::string& path) {
     }
     if (!r.ok) return false;
 
+    uni_.resize(V);
+    for (uint32_t idx = 0; idx < V; ++idx) { uni_[idx] = r.u32(); uniTotal_ += uni_[idx]; }
+    if (!r.ok) return false;
+
     offsets_.resize(V + 1);
     for (uint32_t idx = 0; idx <= V; ++idx) offsets_[idx] = r.u32();
     if (!r.ok) return false;
@@ -80,6 +85,11 @@ uint32_t BigramModel::count(const std::string& w1, const std::string& w2) const 
     for (uint32_t k = offsets_[a]; k < offsets_[a + 1]; ++k)
         if (w2_[k] == ub) return cnt_[k];
     return 0;
+}
+
+uint32_t BigramModel::unigramCount(const std::string& word) const {
+    int a = idOf(word);
+    return a < 0 ? 0u : uni_[a];
 }
 
 uint64_t BigramModel::rowTotal(const std::string& w1) const {

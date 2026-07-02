@@ -70,6 +70,15 @@ int main() {
         assert(c.size() == 1 && c[0] == "sole");
     }
 
+    // --- Accent-folding nel matching T9 (A5) -------------------------------
+    // "città" = c,i,t,t,à ; codice T9 c(2) i(4) t(8) t(8) a(2). La 'à' deve
+    // ripiegare su 'a' (gruppo [abc]) e far matchare la parola accentata.
+    {
+        std::vector<std::vector<wchar_t>> g = { grp("abc"), grp("ghi"), grp("tuv"), grp("tuv"), grp("abc") };
+        auto c = u8(d.computeCandidatesPrefix(g, 8));
+        assert(contains(c, "citt\xC3\xA0"));   // città trovata nonostante l'accento
+    }
+
     // --- Completamento per prefisso (digitazione classica) -----------------
     {
         auto c = u8(d.completionsOf(utf8ToW("cas"), 8));

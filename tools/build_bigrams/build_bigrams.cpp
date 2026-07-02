@@ -112,11 +112,13 @@ int main(int argc, char** argv) {
     // --- vocabolario: unigrammi (UTF-8, gia' minuscoli) + punteggiatura -----
     std::unordered_map<std::string, uint32_t> id;
     std::vector<std::string> vocab;   // id -> stringa
-    auto intern = [&](const std::string& w) {
+    std::vector<uint32_t>    uni;     // id -> frequenza unigramma (0 = punteggiatura)
+    auto intern = [&](const std::string& w, uint32_t freq) {
         auto it = id.find(w);
         if (it != id.end()) return;
         id.emplace(w, static_cast<uint32_t>(vocab.size()));
         vocab.push_back(w);
+        uni.push_back(freq);
     };
 
     {
@@ -129,13 +131,16 @@ int main(int argc, char** argv) {
             std::size_t sep = line.find('\t');
             if (sep == std::string::npos) sep = line.find(' ');
             std::string w = (sep == std::string::npos) ? line : line.substr(0, sep);
-            if (!w.empty()) intern(w);
+            std::string fs = (sep == std::string::npos) ? "" : line.substr(sep + 1);
+            uint32_t freq = fs.empty() ? 1u : static_cast<uint32_t>(std::strtoul(fs.c_str(), nullptr, 10));
+            if (freq == 0) freq = 1;
+            if (!w.empty()) intern(w, freq);
         }
     }
-    // Punteggiatura utile come token di contesto (« » in UTF-8).
+    // Punteggiatura utile come token di contesto (« » in UTF-8). Unigramma 0.
     for (const char* p : {",", ".", ";", ":", "!", "?", "'", "\"", "(", ")",
                           "\xC2\xAB", "\xC2\xBB", "-"})
-        intern(p);
+        intern(p, 0);
 
     std::fprintf(stderr, "vocab: %zu token\n", vocab.size());
 
@@ -218,6 +223,7 @@ int main(int argc, char** argv) {
         wr16(buf, static_cast<uint16_t>(w.size()));
         buf.append(w);
     }
+    for (uint32_t i = 0; i < V; ++i) wr32(buf, uni[i]);   // (v2) unigrammi
     for (uint32_t i = 0; i <= V; ++i) wr32(buf, offsets[i]);
     wr32(buf, static_cast<uint32_t>(pairs.size()));
     for (const auto& p : pairs) { wr32(buf, p.first); wr32(buf, p.second); }

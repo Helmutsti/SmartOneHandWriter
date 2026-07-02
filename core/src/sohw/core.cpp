@@ -11,7 +11,21 @@
 
 namespace sohw {
 
-// Tokenizza una porzione di contesto UTF-8 in parole minuscole (split su spazi).
+// Punteggiatura trattata come TOKEN a se' (coerente col file bigrammi). L'apostrofo
+// resta attaccato alla parola (es. "l'"). Il resto (lettere accentate incluse) e'
+// carattere di parola.
+static bool isPunctSep(wchar_t c) {
+    switch (c) {
+        case L',': case L'.': case L';': case L':': case L'!': case L'?':
+        case L'"': case L'(': case L')': case L'-':
+        case L'«': case L'»':   // « »
+            return true;
+        default: return false;
+    }
+}
+
+// Tokenizza una porzione di contesto UTF-8 in token minuscoli: parole e segni di
+// punteggiatura separati (cosi' 'prev'/'next' combaciano coi token dei bigrammi).
 static std::vector<std::string> tokenize(const std::string& text) {
     std::vector<std::string> out;
     std::wstring w = onehand::utf8ToW(text);
@@ -20,8 +34,14 @@ static std::vector<std::string> tokenize(const std::string& text) {
         if (!cur.empty()) { out.push_back(onehand::wToUtf8(cur)); cur.clear(); }
     };
     for (wchar_t c : w) {
-        if (c == L' ' || c == L'\t' || c == L'\n' || c == L'\r') flush();
-        else cur.push_back(static_cast<wchar_t>(towlower(c)));
+        if (c == L' ' || c == L'\t' || c == L'\n' || c == L'\r') {
+            flush();
+        } else if (isPunctSep(c)) {
+            flush();
+            out.push_back(onehand::wToUtf8(std::wstring(1, c)));
+        } else {
+            cur.push_back(static_cast<wchar_t>(towlower(c)));  // apostrofo incluso
+        }
     }
     flush();
     return out;
@@ -57,6 +77,12 @@ Core& Core::operator=(Core&&) noexcept = default;
 
 void Core::setMode(InputMode mode) { impl_->mode = mode; }
 InputMode Core::mode() const { return impl_->mode; }
+
+void Core::setLiteralCompletion(bool on) { impl_->literal.setCompletion(on); }
+void Core::setNextWordPunctuationFilter(bool on) { impl_->predictor.setFilterNextPunctuation(on); }
+void Core::setRankingWeights(float left, float right, float unigram) {
+    impl_->predictor.setWeights(left, right, unigram);
+}
 
 void Core::loadWordlist(std::istream& in) { impl_->dict.load(in); }
 void Core::loadBigramModel(const std::string& binPath) { impl_->model.load(binPath); }

@@ -33,11 +33,18 @@ public:
     std::vector<std::pair<std::string, uint32_t>> successors(
         const std::string& w1, int maxN) const;
 
+    // Frequenza unigramma del token (0 se assente / punteggiatura).
+    uint32_t unigramCount(const std::string& word) const;
+    // Somma di tutte le frequenze unigramma (per normalizzare).
+    uint64_t unigramTotal() const { return uniTotal_; }
+
     uint32_t vocabSize() const { return static_cast<uint32_t>(vocab_.size()); }
 
 private:
     std::vector<std::string>                    vocab_;    // id -> parola
     std::unordered_map<std::string, uint32_t>   id_;       // parola -> id
+    std::vector<uint32_t>                       uni_;      // id -> freq unigramma
+    uint64_t                                    uniTotal_ = 0;
     std::vector<uint32_t>                       offsets_;  // CSR, size V+1
     std::vector<uint32_t>                       w2_;       // size P
     std::vector<uint32_t>                       cnt_;      // size P

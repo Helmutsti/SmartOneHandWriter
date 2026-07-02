@@ -32,6 +32,10 @@ int main() {
         assert(r.nextByMatch.size() == r.matches.size());
         assert(r.nextByMatch[0].empty());
 
+        // A2: la punteggiatura nel contesto non rompe il matching (tokenizzata a parte).
+        auto rp = core.process(sohw::Context{"sono,", ""}, "76", 8, 5);
+        assert(rp.matches.size() == 2 && rp.matches[0].word == "sole");
+
         // Toggle a digitazione classica: "cas" -> casa, casetta.
         core.setMode(sohw::InputMode::Literal);
         auto r2 = core.process(sohw::Context{"", ""}, "cas", 8, 5);

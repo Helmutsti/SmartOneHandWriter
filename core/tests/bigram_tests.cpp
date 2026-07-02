@@ -23,9 +23,11 @@ static void wr16(std::string& b, uint16_t v) {
     b.push_back((char)(v & 0xFF)); b.push_back((char)((v >> 8) & 0xFF));
 }
 
-// Costruisce un modello: vocab {il,cane,gatto}, bigrammi il->cane(10), il->gatto(5).
+// Costruisce un modello v2: vocab {il,cane,gatto}, unigrammi {1000,50,30},
+// bigrammi il->cane(10), il->gatto(5).
 static std::string buildSample() {
     std::vector<std::string> vocab = {"il", "cane", "gatto"};
+    uint32_t uni[3] = {1000, 50, 30};
     std::string b;
     b.append(kBigramMagic, 4);
     wr32(b, kBigramVersion);
@@ -33,6 +35,7 @@ static std::string buildSample() {
     wr32(b, 2);    // minCount
     wr32(b, (uint32_t)vocab.size());
     for (auto& w : vocab) { wr16(b, (uint16_t)w.size()); b.append(w); }
+    for (uint32_t u : uni) wr32(b, u);          // (v2) unigrammi
     // offsets (V+1): il(0)->[0,2), cane(1)->[2,2), gatto(2)->[2,2), sentinel 2
     uint32_t offs[4] = {0, 2, 2, 2};
     for (uint32_t o : offs) wr32(b, o);
@@ -59,6 +62,9 @@ int main() {
     assert(m.count("il", "topo") == 0);
     assert(m.count("cane", "il") == 0);
     assert(m.rowTotal("il") == 15);
+    assert(m.unigramCount("il") == 1000);
+    assert(m.unigramCount("assente") == 0);
+    assert(m.unigramTotal() == 1080);
 
     auto sc = m.successors("il", 1);
     assert(sc.size() == 1 && sc[0].first == "cane" && sc[0].second == 10);

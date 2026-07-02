@@ -443,21 +443,26 @@ Il **MOTORE** legacy resta intatto e NON usato dal CORE: `engine.{hpp,cpp}`, `on
      restituisce le parole reali con `len ≥ n` i cui primi `n` caratteri stanno nei gruppi.
    - **Literal**: `Dictionary::completionsOf(prefisso)` (parole che iniziano col testo digitato), oppure,
      in passthrough, la parola così com'è.
-3. **Ranking contestuale** (`BigramPredictor::rankCandidates`): per ogni candidato `score = P(cand|prev)`
-   = `count(prev,cand)/rowTotal(prev)`; `stable_sort` per conteggio bigramma desc. I candidati **senza
-   bigramma restano nell'ordine per frequenza del provider** (backoff), con score 0. → `matches` (3).
+3. **Ranking contestuale INTERPOLATO** (`BigramPredictor::rankCandidates`): per ogni candidato
+   `score = wL·P(cand|prev) + wR·P(next|cand) + wU·P(cand)`, dove `prev` è il vicino di sinistra,
+   `next` il vicino di destra, e `P(cand)` l'unigramma. Pesi di default `wL=0.55, wR=0.25, wU=0.20`
+   (configurabili con `Core::setRankingWeights`). Usa quindi il contesto **bidirezionale** + la
+   frequenza; anche i candidati senza bigramma hanno uno score (unigramma), non più 0. `stable_sort`
+   desc (ordine del provider preservato tra pari). → `matches` (3).
 4. **Next-word**: per i primi `topK` match, si crea un contesto con il match in coda a `leftWords` e si
    chiama `predictNext` → i `successors(match, nextN)` del modello, con score = `count/rowTotal`.
+   Di default **filtra la punteggiatura** (`, . : …`) dai suggerimenti (`Core::setNextWordPunctuationFilter`).
    → `nextByMatch` (4), un vettore per ciascun match (la GUI mostra quello del match in cima).
-5. **Senza modello caricato** (o `prev` sconosciuto): rank = ordine del provider (score 0), next vuoto.
-   Il CORE resta quindi utilizzabile con la sola wordlist.
+5. **Senza modello caricato** (o `prev`/`next` sconosciuti): rank = solo unigramma (score piccolo ma non
+   nullo) → in pratica ordine per frequenza; next vuoto. Il CORE resta usabile con la sola wordlist.
 
 ### 20.4 Formato del binario bigrammi (`data/it.bigrams.bin`)
-CSR little-endian (dettaglio in `core/src/sohw/bigram_format.hpp`): magic `SHWB`, versione, `topK`,
-`minCount`, `V`; poi la tabella vocabolario (`uint16 len` + bytes UTF-8, id = indice); poi
-`offsets[V+1]` e le coppie `(uint32 w2_id, uint32 count)` — ogni riga ordinata per conteggio desc.
-Consuntivo generazione reale: 66M righe lette → 13.2M coppie in-vocab → **2.38M dopo pruning**
-(K=64, minCount=2) → **19.7 MB** in ~21 s.
+CSR little-endian (dettaglio in `core/src/sohw/bigram_format.hpp`, **versione 2**): magic `SHWB`,
+versione, `topK`, `minCount`, `V`; tabella vocabolario (`uint16 len` + bytes UTF-8, id = indice);
+**`unigram[V]`** (frequenze dalla wordlist, 0 per la punteggiatura — v2); `offsets[V+1]`; coppie
+`(uint32 w2_id, uint32 count)` — ogni riga ordinata per conteggio desc. Consuntivo generazione reale:
+66M righe → 13.2M coppie in-vocab → **2.38M dopo pruning** (K=64, minCount=2) → **~19.9 MB** in ~21 s.
+NB: i file v1 non sono più compatibili (rigenerare).
 
 ### 20.5 Build / test / run (comandi esatti)
 - CMake è quello di VS2022: `C:\Program Files\Microsoft Visual Studio\2022\Community\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe` (idem `ctest.exe`). NON sono nel PATH.
@@ -485,13 +490,20 @@ Argomenti tool: `build_bigrams <wordlist> <bigrams|-> <out.bin> [K=64] [minCount
 - `| | 7653` (T9 di "sole") → *soldi, sole, soldato…*
 - GUI Win32: schermata verificata (i 4 campi mostrano gli stessi risultati).
 
-### 20.8 Punti di tuning / comportamenti noti
-- **Punteggiatura nel next-word**: `, . :` dominano `predictNext` (sono token del file bigrammi). Per la
-  GUI conviene un **filtro opzionale** della punteggiatura nei suggerimenti next-word (non ancora fatto).
-- **Score match senza contesto = 0**: senza `prev`/bigramma il ranking resta per frequenza (score 0).
-- **Accenti in T9**: i gruppi T9 non contengono lettere accentate; le parole accentate emergono via
-  prefisso (modalità Literal) o resterebbero da gestire con le `alterations` (rinviato).
-- Pruning bigrammi (K=64, minCount=2) tarabile rigenerando il binario.
+### 20.8 Miglioramenti gruppo A (fatti) e tuning residuo
+Il **gruppo A** è stato sistemato:
+- **A1** filtro punteggiatura nel next-word (default ON, `Core::setNextWordPunctuationFilter`).
+- **A2** tokenizzatore del contesto sensibile alla punteggiatura (segni = token propri; apostrofo attaccato).
+- **A3** ranking che usa il contesto **destro** oltre al sinistro (bigramma bidirezionale).
+- **A4** ranking **interpolato** bigramma+unigramma (formato v2 con `unigram[V]`): niente più score 0.
+- **A5** accent-folding nel matching T9 (`città` matcha il codice di `c-i-t-t-a`), in `dictionary.cpp`.
+- **A7** parametri a runtime: `setRankingWeights`, `setNextWordPunctuationFilter`, `setLiteralCompletion`.
+- **A6 (decisione di confine)**: le **maiuscole** NON sono gestite dal CORE. Il CORE restituisce forme
+  canoniche minuscole; la capitalizzazione (inizio frase, nomi propri) è responsabilità del MOTORE/
+  frontend che conosce la posizione nel testo. Si può aggiungere un helper opzionale in futuro.
+
+Tuning residuo: pesi interpolazione (0.55/0.25/0.20) e pruning bigrammi (K=64, minCount=2) tarabili;
+`config.json` non espone ancora questi parametri (solo via API `Core::set*`).
 
 ---
 
@@ -505,12 +517,11 @@ Argomenti tool: `build_bigrams <wordlist> <bigrams|-> <out.bin> [K=64] [minCount
 3. Configura e builda con path corto (§20.5), esegui `ctest` per confermare 6/6.
 4. Prova GUI/CLI (§0). Leggi §20.3 per capire il flusso di `process()`.
 
-### 21.2 Lavori piccoli già individuati
-- **Filtro punteggiatura** nel next-word (opzione in `BigramPredictor::predictNext` o in `Core`): saltare
-  i token di punteggiatura tra i successori. Migliora subito la UX dei suggerimenti (4).
-- **Alterazioni accenti** in T9 (riusare `alterations.*`): oggi le parole accentate non matchano i codici
-  numerici; valutare se aggiungere varianti accentate ai candidati T9.
-- **Config runtime** dei parametri (topK, nextN, completamento vs passthrough) via `config.json`.
+### 21.2 Lavori piccoli
+- ✅ **Gruppo A fatto** (vedi §20.8): filtro punteggiatura, tokenizzazione, ranking bidirezionale +
+  interpolato, accent-folding T9, parametri runtime.
+- Rimasto: esporre i parametri (`pesi`, `topK`, `nextN`, completamento, filtro) anche da `config.json`
+  (oggi solo via API `Core::set*`). Eventuale helper opzionale di capitalizzazione (A6) se servirà.
 
 ### 21.3 Prossimi pezzi grandi (dal piano originale)
 - **Backend BERT** dietro `IPredictor` (ONNX + tokenizer): nuova classe che implementa

@@ -12,10 +12,16 @@
 //   uint32   V             // numero di token nel vocabolario
 //   -- tabella vocabolario, in ordine di id (0..V-1):
 //   { uint16 len; char utf8[len]; } * V
+//   -- (v2) frequenze unigramma per token (dalla wordlist; 0 per la punteggiatura):
+//   uint32   unigram[V]
 //   -- indice CSR:
 //   uint32   offsets[V+1]  // riga id -> [offsets[id], offsets[id+1]) in pairs
 //   uint32   P             // numero totale di coppie (successori)
 //   { uint32 w2_id; uint32 count; } * P   // ogni riga ordinata per count desc
+//
+// v1 -> v2: aggiunto il blocco unigram[V] (subito dopo la tabella vocabolario),
+// per abilitare il ranking interpolato bigramma+unigramma. I file v1 non sono
+// piu' compatibili: rigenerare con build_bigrams.
 #pragma once
 
 #include <cstdint>
@@ -23,6 +29,6 @@
 namespace sohw {
 
 constexpr char     kBigramMagic[4] = {'S', 'H', 'W', 'B'};
-constexpr uint32_t kBigramVersion  = 1u;
+constexpr uint32_t kBigramVersion  = 2u;
 
 } // namespace sohw

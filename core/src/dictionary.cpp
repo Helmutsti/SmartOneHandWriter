@@ -8,6 +8,24 @@
 
 namespace onehand {
 
+// Ripiega le lettere accentate italiane/latine sulla base, per il matching T9
+// (i gruppi del keymap contengono solo lettere base: 'citta'/'città' condividono
+// lo stesso codice numerico).
+static wchar_t foldAccent(wchar_t c) {
+    switch (c) {
+        case L'à': case L'á': case L'â': case L'ã':
+        case L'ä': case L'å': return L'a';
+        case L'è': case L'é': case L'ê': case L'ë': return L'e';
+        case L'ì': case L'í': case L'î': case L'ï': return L'i';
+        case L'ò': case L'ó': case L'ô': case L'õ':
+        case L'ö': return L'o';
+        case L'ù': case L'ú': case L'û': case L'ü': return L'u';
+        case L'ç': return L'c';
+        case L'ñ': return L'n';
+        default: return c;
+    }
+}
+
 void Dictionary::load(std::istream& f) {
     words_.clear();
 
@@ -103,7 +121,8 @@ std::vector<std::wstring> Dictionary::computeCandidatesPrefix(
         bool ok = true;
         for (std::size_t i = 0; i < n; ++i) {
             const std::vector<wchar_t>& g = groups[i];
-            if (std::find(g.begin(), g.end(), e.w[i]) == g.end()) { ok = false; break; }
+            wchar_t ch = foldAccent(e.w[i]);       // accento -> base per il confronto
+            if (std::find(g.begin(), g.end(), ch) == g.end()) { ok = false; break; }
         }
         if (ok) m.push_back({e.w, e.f});
     }
