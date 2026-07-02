@@ -137,7 +137,11 @@ nuovo `motore_c.h` versionato.
    `sohw::Core`** (contesto left/right dai vicini risolti, `encoded` dalle celle) e regola "letterale
    primo" in classica. Test hermetici + integrazione reale (per+52→"la"; classica "cas" con letterale
    primo). 7/7 verdi.
-3. `TypeKey` + `Confirm`/`Advance`/`ConfirmContinue` (§3) + cancellazioni; test dei percorsi.
+3. ✅ **FATTO** — `Confirm` (chiude, rimuove se vuota), `Advance`/`ConfirmContinue` (apre nuova a
+   destra), `Punct` (token Punct; terminale `. ! ?` → conferma continua automatica), `DeleteLetter`
+   (celle o testo; rimuove la parola se vuota), `DeleteWord`. Test hermetici (7/7 verdi).
+   Nota: la conferma continua **automatica** scatta sulla punteggiatura terminale; a fine buffer si usa
+   Avanti/Conferma continua (lo Spazio della keymap §5.1 del piano 03).
 4. `Read` (parse testo → parole Resolved) e `Write` (stringa completa resa; il FE incolla via clipboard).
 5. C ABI del MOTORE + driver di test headless.
 6. Cablatura col FE Windows (piano 03).

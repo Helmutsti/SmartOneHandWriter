@@ -47,6 +47,14 @@ public:
     // parola aperta è Loaded (D11-ii). Ricalcola i candidati via CORE.
     void typeKey(const std::string& sym);
 
+    // --- composizione (M3) -------------------------------------------------
+    void confirm();          // chiude l'aperta e resta (rimuove la parola se vuota)
+    void advance();          // (conferma l'aperta) e apre una nuova parola vuota a destra
+    void confirmContinue();  // combo conferma+avanti (auto a fine frase; anche esplicita)
+    void punct(const std::string& sym);  // conferma + inserisce token Punct; se terminale (. ! ?) -> conferma continua
+    void deleteLetter();     // parola aperta: rimuove l'ultima lettera/cella (se vuota rimuove la parola)
+    void deleteWord();       // rimuove l'intera parola selezionata
+
     // --- render ------------------------------------------------------------
     RenderModel render() const;
 
@@ -54,6 +62,7 @@ public:
 
 private:
     void recomputeOpen();                 // interroga il CORE e aggiorna cands/idx/text della parola aperta
+    void removeWordAt(int index);         // rimuove una parola aggiustando sel_/open_
 
     sohw::Core        core_;
     bool              assisted_ = true;

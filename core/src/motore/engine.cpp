@@ -137,6 +137,69 @@ void Engine::typeKey(const std::string& sym) {
     recomputeOpen();
 }
 
+// ------------------------------------------------------------------ composizione (M3)
+void Engine::removeWordAt(int i) {
+    if (i < 0 || i >= static_cast<int>(words_.size())) return;
+    words_.erase(words_.begin() + i);
+    const int n = static_cast<int>(words_.size());
+    if (open_ == i) open_ = -1; else if (open_ > i) --open_;
+    if (sel_ > i) --sel_; else if (sel_ == i) sel_ = i - 1;   // vai alla precedente
+    if (n == 0) { sel_ = -1; open_ = -1; }
+    else if (sel_ < 0) sel_ = 0;
+    else if (sel_ >= n) sel_ = n - 1;
+}
+
+void Engine::confirm() {
+    if (open_ < 0) return;
+    const int i = open_;
+    open_ = -1;
+    Word& wd = words_[i];
+    if (wd.cells.empty() && wd.text.empty()) removeWordAt(i);   // parola vuota: rimuovi
+    else wd.state = WordState::Resolved;                         // altrimenti chiudi e resta
+}
+
+void Engine::advance() {
+    confirm();                                   // chiude l'eventuale parola aperta
+    Word wd;
+    wd.cls = WordClass::Text; wd.state = WordState::Open; wd.origin = WordOrigin::Typed;
+    const int at = (sel_ < 0) ? 0 : sel_ + 1;
+    words_.insert(words_.begin() + at, std::move(wd));
+    sel_ = open_ = at;
+}
+
+void Engine::confirmContinue() { advance(); }    // = conferma + avanti
+
+void Engine::punct(const std::string& sym) {
+    confirm();
+    Word p;
+    p.cls = WordClass::Punct; p.state = WordState::Resolved; p.origin = WordOrigin::Typed; p.text = sym;
+    const int at = (sel_ < 0) ? 0 : sel_ + 1;
+    words_.insert(words_.begin() + at, std::move(p));
+    sel_ = at;
+    if (sym == "." || sym == "!" || sym == "?") advance();   // fine frase -> conferma continua automatica
+}
+
+void Engine::deleteLetter() {
+    if (open_ < 0) return;
+    Word& wd = words_[open_];
+    if (!wd.cells.empty()) {
+        wd.cells.pop_back();
+        if (wd.cells.empty()) { const int i = open_; open_ = -1; removeWordAt(i); }
+        else recomputeOpen();
+    } else {
+        // Parola senza celle (es. Loaded aperta): rimuove l'ultimo code point dal testo.
+        std::wstring w = onehand::utf8ToW(wd.text);
+        if (!w.empty()) w.pop_back();
+        wd.text = onehand::wToUtf8(w);
+        if (wd.text.empty()) { const int i = open_; open_ = -1; removeWordAt(i); }
+    }
+}
+
+void Engine::deleteWord() {
+    if (sel_ < 0) return;
+    removeWordAt(sel_);
+}
+
 // ------------------------------------------------------------------ integrazione CORE
 void Engine::recomputeOpen() {
     if (open_ < 0) return;

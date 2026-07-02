@@ -125,6 +125,65 @@ int main() {
     }
     std::puts("motore_tests: OK (M2 hermetico)");
 
+    // ================= M3: composizione ===================================
+
+    // --- confirm rimuove una parola vuota ----------------------------------
+    {
+        Engine e; e.loadResolved("ciao");     // sel=0
+        e.advance();                           // apre una nuova parola vuota (index 1)
+        assert(e.wordCount() == 2 && e.openIndex() == 1 && e.words()[1].text.empty());
+        e.confirm();                           // parola vuota -> rimossa
+        assert(e.wordCount() == 1 && e.openIndex() == -1 && e.selection() == 0);
+    }
+
+    // --- confirmContinue = avanti ------------------------------------------
+    {
+        Engine e; e.loadResolved("ciao"); e.select(0);
+        e.confirmContinue();
+        assert(e.openIndex() == 1 && e.wordCount() == 2);
+    }
+
+    // --- punct: non terminale attaccato, terminale -> conferma continua ----
+    {
+        Engine e; e.setMode(false); e.loadResolved("ciao"); e.select(0);
+        e.punct(",");                          // virgola dopo "ciao"
+        assert(e.wordCount() == 2 && e.words()[1].cls == WordClass::Punct && e.words()[1].text == ",");
+        assert(e.openIndex() == -1);
+        assert(e.render().fullText == "ciao,");
+        e.punct(".");                          // punto terminale -> apre nuova parola
+        assert(e.words()[2].text == ".");
+        assert(e.wordCount() == 4 && e.openIndex() == 3);   // ciao , . <vuota aperta>
+    }
+
+    // --- deleteWord rimuove la parola selezionata --------------------------
+    {
+        Engine e; e.loadResolved("uno due tre"); e.select(1);   // "due"
+        e.deleteWord();
+        assert(e.wordCount() == 2 && e.words()[0].text == "uno" && e.words()[1].text == "tre");
+        assert(e.selection() == 0);
+    }
+
+    // --- deleteLetter su parola Loaded aperta (rifila i caratteri) ---------
+    {
+        Engine e; e.loadResolved("ciao"); e.select(0); e.openSelected();
+        e.deleteLetter();
+        assert(e.words()[0].text == "cia");
+        e.deleteLetter(); e.deleteLetter(); e.deleteLetter();   // ci, c, (vuota->rimossa)
+        assert(e.wordCount() == 0 && e.openIndex() == -1);
+    }
+
+    // --- deleteLetter su parola Typed (celle) senza dizionario -------------
+    {
+        Engine e; e.setMode(true);
+        e.typeKey("5"); e.typeKey("2");        // cells [5,2] -> "52" (nessun dict)
+        assert(e.words()[0].text == "52" && e.words()[0].cells.size() == 2);
+        e.deleteLetter();                       // cells [5] -> "5"
+        assert(e.words()[0].text == "5" && e.words()[0].cells.size() == 1);
+        e.deleteLetter();                       // cells vuote -> parola rimossa
+        assert(e.wordCount() == 0 && e.openIndex() == -1);
+    }
+    std::puts("motore_tests: OK (M3 composizione)");
+
     // --- integrazione col CORE reale (se i dati sono presenti) -------------
 #ifdef SOHW_DATA_DIR
     {
