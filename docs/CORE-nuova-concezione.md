@@ -385,7 +385,7 @@ Esistente da conservare: root C++17 `/utf-8`; `onehand_core` statico; `onehand_c
 
 ## 19. Piano operativo di dettaglio
 
-Vedi anche il file di piano: `~/.claude/plans/twinkling-snuggling-feather.md` (stesso contenuto
+Vedi anche il file di piano: `docs/plans/02-core-nuova-concezione.md` (stesso contenuto
 operativo di §10–§16). Prossimo passo alla ripresa: **`git restore .`**, poi milestone 1.
 
 ---
@@ -567,6 +567,7 @@ Lo sviluppo del CORE è **sospeso** dopo M1–M7 + gruppo A + blocchi ad alta pr
     cancellazioni, gestione documento).
 
 ### 21.5 Puntatori
-- Piano operativo: `~/.claude/plans/twinkling-snuggling-feather.md`.
+- Piano operativo: `docs/plans/02-core-nuova-concezione.md`.
+- Architettura complessiva (CORE/MOTORE/FE): `docs/ARCHITETTURA.md`.
 - Memoria di sessione: `…/memory/core-nuova-concezione.md` (+ indice `MEMORY.md`).
 - Commit di riferimento: `45cd8e3`.
