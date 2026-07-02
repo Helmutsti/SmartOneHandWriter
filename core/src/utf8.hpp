@@ -7,4 +7,9 @@
 
 namespace onehand {
 std::wstring utf8ToW(const std::string& s);
+
+// Conversione inversa: std::wstring -> UTF-8. Su Windows (wchar_t 16 bit)
+// ricompone le coppie surrogate; su Linux/macOS tratta ogni wchar_t come code
+// point. Serve al confine UTF-8 del CORE "nuova concezione".
+std::string wToUtf8(const std::wstring& w);
 }

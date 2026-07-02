@@ -74,4 +74,55 @@ std::vector<std::wstring> Dictionary::computeCandidates(
     return out;
 }
 
+// Ordina per frequenza desc, deduplica e limita a maxCand. Helper condiviso.
+static std::vector<std::wstring> rankAndCap(
+    std::vector<std::pair<std::wstring, double>>& m, int maxCand) {
+    std::sort(m.begin(), m.end(),
+              [](const std::pair<std::wstring, double>& a,
+                 const std::pair<std::wstring, double>& b) { return a.second > b.second; });
+    std::vector<std::wstring> out;
+    std::set<std::wstring> seen;
+    for (auto& p : m) {
+        if (seen.count(p.first)) continue;
+        seen.insert(p.first);
+        out.push_back(p.first);
+        if (maxCand > 0 && static_cast<int>(out.size()) >= maxCand) break;
+    }
+    return out;
+}
+
+std::vector<std::wstring> Dictionary::computeCandidatesPrefix(
+    const std::vector<std::vector<wchar_t>>& groups, int maxCand) const {
+    std::vector<std::wstring> out;
+    if (groups.empty()) return out;
+
+    const std::size_t n = groups.size();
+    std::vector<std::pair<std::wstring, double>> m;
+    for (auto& e : words_) {
+        if (e.w.size() < n) continue;              // completamento: len >= n
+        bool ok = true;
+        for (std::size_t i = 0; i < n; ++i) {
+            const std::vector<wchar_t>& g = groups[i];
+            if (std::find(g.begin(), g.end(), e.w[i]) == g.end()) { ok = false; break; }
+        }
+        if (ok) m.push_back({e.w, e.f});
+    }
+    return rankAndCap(m, maxCand);
+}
+
+std::vector<std::wstring> Dictionary::completionsOf(
+    const std::wstring& prefix, int maxCand) const {
+    std::vector<std::wstring> out;
+    const std::size_t n = prefix.size();
+    if (n == 0) return out;
+
+    std::vector<std::pair<std::wstring, double>> m;
+    for (auto& e : words_) {
+        if (e.w.size() < n) continue;
+        if (e.w.compare(0, n, prefix) != 0) continue;
+        m.push_back({e.w, e.f});
+    }
+    return rankAndCap(m, maxCand);
+}
+
 } // namespace onehand

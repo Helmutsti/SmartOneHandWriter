@@ -26,6 +26,19 @@ public:
     std::vector<std::wstring> computeCandidates(
         const std::vector<std::vector<wchar_t>>& groups, int maxCand) const;
 
+    // Come computeCandidates ma con COMPLETAMENTO: una parola e' candidata se ha
+    // lunghezza >= numero di gruppi e i suoi PRIMI n caratteri appartengono ai
+    // gruppi corrispondenti (le lettere oltre l'n-esima sono libere). Ordinati per
+    // frequenza, al massimo maxCand. E' il matching T9 della "nuova concezione".
+    std::vector<std::wstring> computeCandidatesPrefix(
+        const std::vector<std::vector<wchar_t>>& groups, int maxCand) const;
+
+    // Completamenti per prefisso (digitazione classica, matching OFF): parole che
+    // iniziano con 'prefix' (lunghezza >= |prefix|), ordinate per frequenza, max
+    // maxCand. 'prefix' e' confrontato cosi' com'e' (gia' minuscolo se serve).
+    std::vector<std::wstring> completionsOf(
+        const std::wstring& prefix, int maxCand) const;
+
     bool empty() const { return words_.empty(); }
 
 private:

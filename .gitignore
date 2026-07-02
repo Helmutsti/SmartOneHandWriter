@@ -1,6 +1,7 @@
-# Build CMake
+# Build CMake (solo directory di build alla radice: non toccare tools/build_bigrams)
 /build/
-build*/
+/build*/
+/cmake-build*/
 
 # Artefatti di compilazione
 *.o
@@ -19,3 +20,8 @@ build*/
 
 # Metadati macOS
 .DS_Store
+
+# Modello bigrammi generato da tools/build_bigrams (rigenerabile, ~20 MB)
+/data/it.bigrams.bin
+# Archivio/estratto bigrammi (fuori repo di norma)
+*.word.bigrams
