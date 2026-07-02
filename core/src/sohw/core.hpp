@@ -31,6 +31,7 @@ public:
     void setLiteralCompletion(bool on);            // Literal: completamento vs passthrough
     void setNextWordPunctuationFilter(bool on);    // scarta la punteggiatura dal next-word
     void setRankingWeights(float left, float right, float unigram);  // pesi interpolazione
+    void setSkipPunctuationInContext(bool on);     // vicino = parola reale (salta punteggiatura)
 
     // Carica il dizionario (unigrammi con frequenza) da uno stream gia' aperto.
     void loadWordlist(std::istream& in);

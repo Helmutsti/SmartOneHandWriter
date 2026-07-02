@@ -2,8 +2,10 @@
 // Dettaglio interno del core (non fa parte dell'API pubblica).
 #pragma once
 
+#include <cstdint>
 #include <istream>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace onehand {
@@ -42,7 +44,20 @@ public:
     bool empty() const { return words_.empty(); }
 
 private:
+    // Indici costruiti a fine load() per evitare la scansione O(N) per query:
+    //  - byWord_: id ordinati lessicograficamente (ricerca binaria per prefisso);
+    //  - trie_:   trie sulle lettere "folded" (accento->base); ogni nodo tiene gli
+    //             id delle parole del suo sottoalbero, per il matching T9 con
+    //             completamento (a profondita' n = tutte le parole con quel prefisso).
+    struct TrieNode {
+        std::unordered_map<wchar_t, int> ch;
+        std::vector<uint32_t>            words;   // id nel sottoalbero (len >= depth)
+    };
+    void buildIndexes();
+
     std::vector<DictEntry> words_;
+    std::vector<uint32_t>  byWord_;   // id ordinati per words_[id].w
+    std::vector<TrieNode>  trie_;     // trie_[0] = radice
 };
 
 } // namespace onehand

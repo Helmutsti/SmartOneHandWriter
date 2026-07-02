@@ -60,6 +60,38 @@ void Dictionary::load(std::istream& f) {
         words_.push_back({w, freq});
         ++rank;
     }
+    buildIndexes();
+}
+
+void Dictionary::buildIndexes() {
+    // Indice per prefisso: id ordinati per parola.
+    byWord_.resize(words_.size());
+    for (uint32_t i = 0; i < words_.size(); ++i) byWord_[i] = i;
+    std::sort(byWord_.begin(), byWord_.end(),
+              [this](uint32_t a, uint32_t b) { return words_[a].w < words_[b].w; });
+
+    // Trie sulle lettere folded: ogni nodo raccoglie gli id delle parole che vi
+    // passano (quindi il nodo a profondita' d contiene tutte le parole con quel
+    // prefisso di d lettere e len >= d).
+    trie_.clear();
+    trie_.push_back(TrieNode{});   // radice
+    for (uint32_t id = 0; id < words_.size(); ++id) {
+        int cur = 0;
+        for (wchar_t raw : words_[id].w) {
+            wchar_t f = foldAccent(raw);
+            auto it = trie_[cur].ch.find(f);
+            int nxt;
+            if (it != trie_[cur].ch.end()) {
+                nxt = it->second;
+            } else {
+                nxt = static_cast<int>(trie_.size());
+                trie_.push_back(TrieNode{});          // puo' riallocare: da qui reindicizzare
+                trie_[cur].ch[f] = nxt;
+            }
+            trie_[nxt].words.push_back(id);
+            cur = nxt;
+        }
+    }
 }
 
 std::vector<std::wstring> Dictionary::computeCandidates(
@@ -112,20 +144,28 @@ static std::vector<std::wstring> rankAndCap(
 std::vector<std::wstring> Dictionary::computeCandidatesPrefix(
     const std::vector<std::vector<wchar_t>>& groups, int maxCand) const {
     std::vector<std::wstring> out;
-    if (groups.empty()) return out;
+    if (groups.empty() || trie_.empty()) return out;
 
     const std::size_t n = groups.size();
-    std::vector<std::pair<std::wstring, double>> m;
-    for (auto& e : words_) {
-        if (e.w.size() < n) continue;              // completamento: len >= n
-        bool ok = true;
-        for (std::size_t i = 0; i < n; ++i) {
-            const std::vector<wchar_t>& g = groups[i];
-            wchar_t ch = foldAccent(e.w[i]);       // accento -> base per il confronto
-            if (std::find(g.begin(), g.end(), ch) == g.end()) { ok = false; break; }
+    // Discesa nel trie: a ogni livello si seguono le lettere del gruppo che
+    // esistono come figli. I nodi a profondita' n sono distinti (percorsi diversi)
+    // e i loro insiemi di parole sono disgiunti (nessun duplicato).
+    std::vector<int> frontier = {0};
+    for (std::size_t i = 0; i < n && !frontier.empty(); ++i) {
+        std::vector<int> next;
+        for (int node : frontier) {
+            for (wchar_t letter : groups[i]) {
+                auto it = trie_[node].ch.find(letter);
+                if (it != trie_[node].ch.end()) next.push_back(it->second);
+            }
         }
-        if (ok) m.push_back({e.w, e.f});
+        frontier.swap(next);
     }
+
+    std::vector<std::pair<std::wstring, double>> m;
+    for (int node : frontier)
+        for (uint32_t id : trie_[node].words)
+            m.push_back({words_[id].w, words_[id].f});
     return rankAndCap(m, maxCand);
 }
 
@@ -135,11 +175,17 @@ std::vector<std::wstring> Dictionary::completionsOf(
     const std::size_t n = prefix.size();
     if (n == 0) return out;
 
+    // Ricerca binaria dell'inizio del range di prefisso su byWord_, poi scansione
+    // finche' la parola inizia col prefisso.
+    auto lo = std::lower_bound(byWord_.begin(), byWord_.end(), prefix,
+                               [this](uint32_t id, const std::wstring& p) {
+                                   return words_[id].w < p;
+                               });
     std::vector<std::pair<std::wstring, double>> m;
-    for (auto& e : words_) {
-        if (e.w.size() < n) continue;
-        if (e.w.compare(0, n, prefix) != 0) continue;
-        m.push_back({e.w, e.f});
+    for (auto it = lo; it != byWord_.end(); ++it) {
+        const std::wstring& w = words_[*it].w;
+        if (w.size() < n || w.compare(0, n, prefix) != 0) break;
+        m.push_back({w, words_[*it].f});
     }
     return rankAndCap(m, maxCand);
 }

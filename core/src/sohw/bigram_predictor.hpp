@@ -32,11 +32,18 @@ public:
         wL_ = left; wR_ = right; wU_ = unigram;
     }
     void setFilterNextPunctuation(bool on) { filterNextPunct_ = on; }
+    // Se ON (default), il vicino di contesto (prev/next) e' il token REALE piu'
+    // vicino, saltando la punteggiatura (es. "per, ▮" -> prev = "per", non ",").
+    void setSkipPunctuationNeighbors(bool on) { skipPunctNb_ = on; }
 
 private:
+    std::string leftNeighbor(const PredictContext& ctx) const;
+    std::string rightNeighbor(const PredictContext& ctx) const;
+
     const BigramModel& model_;
     float wL_ = 0.55f, wR_ = 0.25f, wU_ = 0.20f;
     bool  filterNextPunct_ = true;
+    bool  skipPunctNb_ = true;
 };
 
 } // namespace sohw

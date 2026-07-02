@@ -4,13 +4,6 @@
 
 namespace sohw {
 
-static std::string backWord(const std::vector<std::string>& v) {
-    return v.empty() ? std::string() : v.back();
-}
-static std::string frontWord(const std::vector<std::string>& v) {
-    return v.empty() ? std::string() : v.front();
-}
-
 // Token di punteggiatura (stesso set interniato da build_bigrams).
 static bool isPunctToken(const std::string& w) {
     static const char* const kP[] = {
@@ -20,10 +13,25 @@ static bool isPunctToken(const std::string& w) {
     return false;
 }
 
+// Vicino sinistro: ultimo token; se skipPunctNb_, l'ultima PAROLA reale.
+std::string BigramPredictor::leftNeighbor(const PredictContext& ctx) const {
+    for (auto it = ctx.leftWords.rbegin(); it != ctx.leftWords.rend(); ++it) {
+        if (!skipPunctNb_ || !isPunctToken(*it)) return *it;
+    }
+    return {};
+}
+// Vicino destro: primo token; se skipPunctNb_, la prima PAROLA reale.
+std::string BigramPredictor::rightNeighbor(const PredictContext& ctx) const {
+    for (const auto& w : ctx.rightWords) {
+        if (!skipPunctNb_ || !isPunctToken(w)) return w;
+    }
+    return {};
+}
+
 std::vector<Suggestion> BigramPredictor::rankCandidates(
     const PredictContext& ctx, const std::vector<std::string>& candidates) const {
-    const std::string prev  = backWord(ctx.leftWords);    // vicino di sinistra
-    const std::string next  = frontWord(ctx.rightWords);  // vicino di destra
+    const std::string prev  = leftNeighbor(ctx);    // vicino di sinistra (parola reale)
+    const std::string next  = rightNeighbor(ctx);   // vicino di destra (parola reale)
     const uint64_t    lTot  = prev.empty() ? 0 : model_.rowTotal(prev);
     const uint64_t    uTot  = model_.unigramTotal();
 
@@ -54,7 +62,7 @@ std::vector<Suggestion> BigramPredictor::rankCandidates(
 std::vector<Suggestion> BigramPredictor::predictNext(
     const PredictContext& ctx, int maxN) const {
     std::vector<Suggestion> out;
-    const std::string prev = backWord(ctx.leftWords);
+    const std::string prev = leftNeighbor(ctx);
     if (prev.empty()) return out;
     const uint64_t total = model_.rowTotal(prev);
     if (total == 0) return out;

@@ -83,6 +83,9 @@ void Core::setNextWordPunctuationFilter(bool on) { impl_->predictor.setFilterNex
 void Core::setRankingWeights(float left, float right, float unigram) {
     impl_->predictor.setWeights(left, right, unigram);
 }
+void Core::setSkipPunctuationInContext(bool on) {
+    impl_->predictor.setSkipPunctuationNeighbors(on);
+}
 
 void Core::loadWordlist(std::istream& in) { impl_->dict.load(in); }
 void Core::loadBigramModel(const std::string& binPath) { impl_->model.load(binPath); }

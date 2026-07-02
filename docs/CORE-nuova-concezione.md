@@ -423,7 +423,8 @@ core/src/sohw/
 core/include/sohw/
   smartcore_c.h          C ABI pubblico (UTF-8): sc_create/set_mode/load_*/process/match_*/next_*/free
 core/src/                (riuso/modifica del core esistente "onehand")
-  dictionary.{hpp,cpp}   +computeCandidatesPrefix(len>=n), +completionsOf(prefisso). Storage unigram+freq.
+  dictionary.{hpp,cpp}   +computeCandidatesPrefix(len>=n) via TRIE folded, +completionsOf(prefisso)
+                         via indice ordinato + lower_bound. Storage unigram+freq. Indici in buildIndexes().
   utf8.{hpp,cpp}         utf8ToW (esistente) + wToUtf8 (nuovo). Conversioni ai bordi.
   config.cpp/types.hpp   KeyMap T9 (defaultT9KeyMap, groupOf), Config, parseConfig (riusati)
 tools/build_bigrams/     preprocessing offline: CP1252->UTF-8, vocab, pruning -> data/it.bigrams.bin
@@ -436,8 +437,9 @@ Il **MOTORE** legacy resta intatto e NON usato dal CORE: `engine.{hpp,cpp}`, `on
 `predictor_frequency.cpp`, `ngram_predictor.*`, `platform/windows/main_win32.cpp`, `platform/macos`.
 
 ### 20.3 Come funziona una chiamata (`Core::process(ctx, encoded, topK, nextN)`)
-1. **Tokenizza** `ctx.left`/`ctx.right` in parole minuscole (split sugli spazi). `prev` = ultima parola
-   di `left`; `sentenceStart` = `left` vuoto.
+1. **Tokenizza** `ctx.left`/`ctx.right` in token minuscoli (parole + punteggiatura separata). Il vicino
+   di contesto `prev`/`next` è il **token reale più vicino** (salta la punteggiatura di default,
+   `Core::setSkipPunctuationInContext`); `sentenceStart` = `left` vuoto.
 2. **Candidati** dal provider secondo la modalità (`cfg.maxCandidates`, default 8):
    - **T9**: ogni simbolo → gruppo di lettere (`KeyMap::groupOf`), poi `Dictionary::computeCandidatesPrefix`
      restituisce le parole reali con `len ≥ n` i cui primi `n` caratteri stanno nei gruppi.
@@ -497,13 +499,23 @@ Il **gruppo A** è stato sistemato:
 - **A3** ranking che usa il contesto **destro** oltre al sinistro (bigramma bidirezionale).
 - **A4** ranking **interpolato** bigramma+unigramma (formato v2 con `unigram[V]`): niente più score 0.
 - **A5** accent-folding nel matching T9 (`città` matcha il codice di `c-i-t-t-a`), in `dictionary.cpp`.
-- **A7** parametri a runtime: `setRankingWeights`, `setNextWordPunctuationFilter`, `setLiteralCompletion`.
+- **A7** parametri a runtime: `setRankingWeights`, `setNextWordPunctuationFilter`, `setLiteralCompletion`,
+  `setSkipPunctuationInContext`.
 - **A6 (decisione di confine)**: le **maiuscole** NON sono gestite dal CORE. Il CORE restituisce forme
   canoniche minuscole; la capitalizzazione (inizio frase, nomi propri) è responsabilità del MOTORE/
   frontend che conosce la posizione nel testo. Si può aggiungere un helper opzionale in futuro.
 
 Tuning residuo: pesi interpolazione (0.55/0.25/0.20) e pruning bigrammi (K=64, minCount=2) tarabili;
 `config.json` non espone ancora questi parametri (solo via API `Core::set*`).
+
+### 20.9 Blocchi ad alta priorità risolti (prestazioni + contesto)
+- **#1 Prestazioni** — il `Dictionary` non fa più scansioni O(N) per query: **trie** sulle lettere
+  folded per il T9 (`computeCandidatesPrefix`) e **indice ordinato + `lower_bound`** per il
+  completamento (`completionsOf`); indici costruiti in `buildIndexes()` a fine `load()`. Benchmark:
+  **~0.48 ms/query** end-to-end (incluso I/O e stampa) su 20k query, dizionario reale 49k + modello v2.
+- **#2/#3 Vicino di contesto** — `prev`/`next` sono ora il **token reale più vicino**, saltando la
+  punteggiatura (default ON, `Core::setSkipPunctuationInContext`). Con i bigrammi il contesto utile
+  resta l'immediato: contesto più profondo (multi-parola) richiede trigrammi/BERT (rinviato).
 
 ---
 

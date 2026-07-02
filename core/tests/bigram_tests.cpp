@@ -83,6 +83,11 @@ int main() {
     assert(n.size() == 2 && n[0].word == "cane" && n[1].word == "gatto");
     assert(n[0].score > n[1].score);
 
+    // #2: un token di punteggiatura come vicino viene saltato -> prev reale = "il".
+    PredictContext ctxP; ctxP.leftWords = {"il", ","};
+    auto np = pred.predictNext(ctxP, 5);
+    assert(np.size() == 2 && np[0].word == "cane");
+
     std::remove(path.c_str());
     std::puts("bigram_tests: OK (hermetico)");
 
