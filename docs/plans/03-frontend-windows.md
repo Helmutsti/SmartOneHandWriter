@@ -17,8 +17,10 @@ FE) ed essere una *struttura di funzionamento*, non solo un tool di suggerimenti
   (il MOTORE possiede il testo; il FE inietta).
 - **Overlay**: un **box colorato senza bordi né chrome** — solo testo ASCII semplice — vicino al punto di
   digitazione. **Sparisce quando il buffer è vuoto**.
-- **inserisci automatico**: chiudere una parola apre auto una nuova parola **solo se è l'ultima della
-  frase**; in mezzo, chiude e basta (la selezione avanza).
+- **conferma / avanti / conferma continua**: la chiusura di una parola è **Conferma** (chiude, resta
+  sul posto); **Avanti** sposta a destra e apre una nuova parola; **Conferma continua** è la combo
+  (Conferma+Avanti) che **scatta in automatico a fine frase** (delimitata da punteggiatura `. ! ?`) ed è
+  anche un bottone dedicato. In mezzo al testo si usa Conferma da sola.
 - **cancella**: **due tasti separati** ora (un tasto per funzione). Le primitive `DeleteLetter`/
   `DeleteWord` restano atomiche nell'engine; l'eventuale "cancella intelligente" sarà logica FE futura.
 - **load**: il testo caricato è dato per **già completato**; le parole caricate sono *risolte* e possono
@@ -39,19 +41,22 @@ Un **bottone per funzione** (vedi §4) + un **Play/Pause** che attiva/disattiva 
 Quando in pausa, i tasti passano all'app normalmente.
 
 ## 4. Funzioni → azioni dell'engine
-| Bottone | Comportamento | Azione engine (proposta) |
+| Bottone | Comportamento | Azione engine |
 |---|---|---|
-| Naviga ◀ / ▶ | sposta la **selezione** tra le parole del testo | `NavigatePrev` / `NavigateNext` |
-| Apri/Edit | apre la parola selezionata per l'editing (Roll, digitazione) | `OpenSelected` |
+| Naviga ◀ / ▶ | sposta la **selezione** tra le parole (frecce) | `NavigatePrev` / `NavigateNext` |
+| Apri/Edit | evidenzia la parola selezionata e abilita **digitazione/Roll** | `OpenSelected` |
 | Roll | cicla i suggerimenti della parola **aperta** | `Roll` |
-| Cancella (open) | se una parola è aperta, cancella **una lettera** | `DeleteLetter` |
-| Cancella (close) | se la parola selezionata è chiusa, cancella **l'intera parola** | `DeleteWord` |
-| Inserisci | si sposta a destra e apre una **nuova parola** ovunque tu sia | `Insert` |
-| Complete | scrive tutto il buffer nell'app attiva e **svuota** il buffer | `Complete` |
-| Load | carica il testo selezionato dall'app nel buffer (parole risolte) | `Load(text)` |
+| Cancella open | parola **aperta**: cancella **una lettera** | `DeleteLetter` |
+| Cancella close | parola **chiusa** selezionata: cancella **l'intera parola** | `DeleteWord` |
+| Conferma | conferma/chiude la parola aperta (**resta** sul posto) | `Confirm` |
+| Avanti | dopo la conferma: si sposta a destra e **apre una nuova parola** | `Advance` |
+| Conferma continua | combo **Conferma+Avanti**; automatica a fine frase, o manuale | `ConfirmContinue` |
+| Write | scrive tutto il buffer nell'app attiva e **svuota** | `Write` |
+| Read | carica nel buffer il testo selezionato (parole risolte) | `Read(text)` |
 
-Regola: la chiusura di una parola (Conferma) chiama `Insert` **in automatico solo se è l'ultima** della
-frase (§2). Questa logica sta nell'engine, non nel FE.
+Regola: **Conferma continua** scatta in automatico quando la parola si trova a **fine frase**
+(delimitata da punteggiatura); altrimenti **Conferma** chiude soltanto e si usa **Avanti** per
+proseguire. Questa logica sta nell'engine, non nel FE.
 
 ## 5. Modalità di digitazione
 Scelta utente: **assistita** o **classica**.
@@ -66,9 +71,9 @@ La mappa **tasto fisico → gruppo/lettera** è configurabile (default proposti 
 ## 6. Interception & I/O (cuore del FE Windows)
 - **Hook tastiera low-level** (`WH_KEYBOARD_LL`): quando attivo (Play), intercetta i tasti mappati e li
   traduce in azioni/lettere per l'engine invece di inviarli all'app; i tasti non mappati passano.
-- **Iniezione** (`SendInput`) su `Complete`: scrive il testo del buffer nell'app attiva (con firma
+- **Iniezione** (`SendInput`) su `Write`: scrive il testo del buffer nell'app attiva (con firma
   sugli eventi iniettati per non ri-catturarli, come nel legacy `main_win32.cpp`).
-- **Load**: legge il **testo selezionato** dall'app attiva. Approccio proposto: simulare `Ctrl+C` e
+- **Read**: legge il **testo selezionato** dall'app attiva. Approccio proposto: simulare `Ctrl+C` e
   leggere la **clipboard** (semplice, universale), poi tokenizzare nel buffer come parole risolte.
 - **Play/Pause**: installa/rimuove l'hook e mostra/nasconde overlay+pannello.
 
@@ -92,7 +97,7 @@ piano 04.
 2. Hook tastiera + pass-through; mappatura tasti→azioni/gruppi (preset numpad e QWEASDZXC).
 3. Cablatura al MOTORE (C ABI): azioni dei bottoni + digitazione → render model → disegno overlay
    (selezionata/aperta colorate).
-4. `Complete` (iniezione `SendInput`) e `Load` (clipboard) end-to-end.
+4. `Write` (iniezione `SendInput`) e `Read` (clipboard) end-to-end.
 5. Toggle assistita/classica; configurazione mappa tasti.
 6. Rifiniture: posizione overlay/caret, persistenza config.
 

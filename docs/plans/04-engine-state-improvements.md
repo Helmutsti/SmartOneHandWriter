@@ -19,35 +19,38 @@
   - `open` = indice della parola **aperta** in editing, oppure nessuno
   - Invariante: al più **una** parola Open; quando è aperta, di norma `sel == open`.
 
-## 2. Azioni (API dell'engine) — atomiche
+## 2. Azioni (API dell'engine) — atomiche + una combo
 | Azione | Effetto |
 |---|---|
 | `NavigatePrev` / `NavigateNext` | (auto-conferma l'eventuale parola aperta, vedi §3) e sposta `sel` |
-| `OpenSelected` | apre `sel` per l'editing (`open=sel`, `state=Open`) |
+| `OpenSelected` | apre `sel` per l'editing (`open=sel`, `state=Open`): abilita digitazione/Roll |
 | `Roll` | cicla `cands` della parola aperta (solo Typed) |
 | `DeleteLetter` | sulla parola **aperta**: rimuove l'ultima cella; se vuota → rimuove la parola |
 | `DeleteWord` | sulla parola **chiusa** selezionata: rimuove l'intera parola |
-| `Insert` | conferma l'aperta (se c'è) e crea+apre una **nuova parola vuota a destra**, ovunque |
-| `TypeKey(sym)` | se nessuna parola è aperta → apre una nuova parola (Insert implicito); poi appende `sym` e ricalcola i candidati via CORE |
-| `Load(text)` | importa testo (già completato) come parole **Resolved/Loaded** nel buffer |
-| `Complete` | conferma l'aperta, restituisce il testo completo e **svuota** il documento |
+| `Confirm` | chiude la parola aperta (`state=Resolved`), **senza spostarsi né creare** |
+| `Advance` | dopo la conferma: crea+apre una **nuova parola vuota a destra** (`open=nuova`) |
+| `ConfirmContinue` | **combo** `Confirm`+`Advance`; automatica a fine frase, o esplicita (§3) |
+| `TypeKey(sym)` | se nessuna parola è aperta → apre una nuova parola; poi appende `sym` e ricalcola i candidati via CORE |
+| `Read(text)` | importa testo (già completato) come parole **Resolved/Loaded** nel buffer |
+| `Write` | conferma l'aperta, restituisce il testo completo e **svuota** il documento |
 
 Le primitive di cancellazione restano **due** e atomiche (niente "delete intelligente" hardcoded:
-è composizione lato FE, se e quando servirà).
+è composizione lato FE). Anche `Confirm`/`Advance` sono atomiche; `ConfirmContinue` è la loro combo.
 
-## 3. Regola chiave: conferma / inserisci automatico (DA VALIDARE)
-Interpretazione della specifica ("chiudere una parola scatena inserisci **solo se è l'ultima della
-frase**, altrimenti in automatico"):
-- **`Insert`** (azione esplicita): conferma l'aperta e **crea sempre** una nuova parola a destra. È il
-  modo per chiudere l'**ultima** parola e continuare a scrivere in coda.
-- **Navigare via** da una parola aperta la **auto-conferma** (close) **senza** creare nuove parole →
-  questo è il caso "in mezzo": editi una parola interna e ti sposti, la chiusura è automatica.
-- Quindi: la creazione automatica di una nuova parola avviene **solo in coda** (ultima), tramite
-  `Insert`; in mezzo la chiusura è automatica e non genera parole vuote.
+## 3. Regola chiave: Conferma / Avanti / Conferma continua
+Modello (dalla lista bottoni aggiornata dall'utente):
+- **`Confirm`**: chiude la parola aperta e **resta** sul posto. Nessuna creazione, nessuno spostamento.
+- **`Advance`**: presuppone una parola appena confermata; **crea+apre** una nuova parola a destra
+  (proseguire in coda). È il "avanti".
+- **`ConfirmContinue`** = `Confirm` + `Advance` come **combo**. Scatta **in automatico a fine frase**
+  (la frase è delimitata da punteggiatura `. ! ?`), ed è anche un **bottone** esplicito.
+- **In mezzo** al testo si usa `Confirm` da solo (chiude e basta); per proseguire in coda si usa
+  `Advance` o la conferma continua automatica.
+- **Navigare via** da una parola aperta la **auto-conferma** (`Confirm`) senza creare.
 
-⚠️ Questa è l'interpretazione da **confermare** all'inizio dell'implementazione dell'engine: definisce
-il cuore del comportamento. Va anche definito cos'è "ultima della frase" (fine buffer? prima di
-punteggiatura di fine frase?).
+⚠️ Micro-questione residua: la conferma continua **automatica** scatta (a) solo quando la parola è a
+**fine buffer**, oppure (b) a **ogni confine di frase interno** (quando si completa una frase con
+punteggiatura terminale anche in mezzo al testo)? Da chiudere prima dell'implementazione.
 
 ## 4. Integrazione col CORE (`sohw::Core`)
 Per la parola **aperta**, l'engine costruisce ed interroga il CORE:
@@ -76,18 +79,21 @@ inserimento verso l'app esterna). Overlay = mostra il buffer; Effects = scrive n
 5. **Costruito sul CORE nuovo** (`sohw::Core`): contesto a bigrammi interpolato, completamento `len≥n`,
    modo Literal — invece dei vecchi Dictionary/Predictor diretti.
 6. **Primitive di cancellazione atomiche** mantenute; fusione "intelligente" lasciata al FE.
-7. **Regola inserisci** raffinata (auto solo in coda, §3).
+7. **Conferma/Avanti/Conferma continua** come azioni distinte + combo auto a fine frase (§3), invece
+   di un unico "insert".
 8. **Mappa tasto fisico → gruppo** flessibile (tastierino numerico / `q,w,e,a,s,d,z,x,c`), delegata al
    keymap; il modo (assistita/classica) è `Core::setMode`.
 
 ## 7. C ABI del MOTORE
 Estende il contratto FFI: azioni (`NavigatePrev/Next`, `OpenSelected`, `Roll`, `DeleteLetter`,
-`DeleteWord`, `Insert`, `TypeKey`, `Load`, `Complete`), lettura del **render model** (conteggio parole,
+`DeleteWord`, `Confirm`, `Advance`, `ConfirmContinue`, `TypeKey`, `Read`, `Write`), lettura del
+**render model** (conteggio parole,
 testo, stato per-parola, indici `sel`/`open`) e degli `Effects` di iniezione su `Complete`. Da valutare
 se sopra il legacy `onehand_c.h` (rinumerazione vietata) o un nuovo `motore_c.h` versionato.
 
 ## 8. Questioni aperte (da chiudere in implementazione)
-- **§3**: semantica esatta conferma/insert e definizione di "ultima della frase". *(priorità 1)*
+- **§3**: trigger della **conferma continua automatica** — solo a fine buffer o a ogni confine di frase
+  interno? Definizione operativa di "fine frase". *(priorità 1)*
 - **Editing di parole Loaded**: senza `cells` niente Roll; editarle = cancella+ridigita (diventano
   Typed) oppure `DeleteWord`. Confermare il comportamento di `OpenSelected` su parola Loaded.
 - **Navigazione con parola aperta**: conferma-e-muovi (assunto) vs vietato.
@@ -97,8 +103,8 @@ se sopra il legacy `onehand_c.h` (rinumerazione vietata) o un nuovo `motore_c.h`
 ## 9. Milestone (proposta)
 1. Modello dati + due cursori + render model; test headless (senza GUI).
 2. Azioni di navigazione/apertura/roll + integrazione `sohw::Core` per i candidati.
-3. `TypeKey` + regola conferma/`Insert` (§3) + cancellazioni; test dei percorsi.
-4. `Load` (parse testo → parole Resolved) e `Complete` (testo + `Effects` di iniezione).
+3. `TypeKey` + `Confirm`/`Advance`/`ConfirmContinue` (§3) + cancellazioni; test dei percorsi.
+4. `Read` (parse testo → parole Resolved) e `Write` (testo + `Effects` di iniezione).
 5. C ABI del MOTORE + driver di test headless.
 6. Cablatura col FE Windows (piano 03).
 
