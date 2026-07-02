@@ -167,9 +167,12 @@ static void paintOverlay(HWND hwnd) {
 
     // misura larghezza totale per lo scorrimento (tiene visibile la parte finale)
     int spaceW = 0; { SIZE sz; GetTextExtentPoint32W(hdc, L" ", 1, &sz); spaceW = sz.cx; }
+    int caretH = 0; { SIZE sz; GetTextExtentPoint32W(hdc, L"M", 1, &sz); caretH = sz.cy; }
+    const int kCaretW = 3, kCaretAdv = 7;   // cursore dello slot vuoto in modifica
     int total = 0;
     for (const auto& s : g_spans) {
         if (s.spaceBefore) total += spaceW;
+        if (s.hl == (int)motore::Highlight::Open && s.text.empty()) { total += kCaretAdv; continue; }
         SIZE sz; GetTextExtentPoint32W(hdc, s.text.c_str(), (int)s.text.size(), &sz);
         total += sz.cx;
     }
@@ -179,6 +182,14 @@ static void paintOverlay(HWND hwnd) {
     const int y = 8;
     for (const auto& s : g_spans) {
         if (s.spaceBefore) x += spaceW;
+        // Slot vuoto in modifica: disegna solo un cursore ambra (nessun testo).
+        if (s.hl == (int)motore::Highlight::Open && s.text.empty()) {
+            RECT car = { x, y, x + kCaretW, y + caretH };
+            HBRUSH cb = CreateSolidBrush(kOpenBg);
+            FillRect(hdc, &car, cb); DeleteObject(cb);
+            x += kCaretAdv;
+            continue;
+        }
         SIZE sz; GetTextExtentPoint32W(hdc, s.text.c_str(), (int)s.text.size(), &sz);
         if (s.hl == (int)motore::Highlight::Selected || s.hl == (int)motore::Highlight::Open) {
             RECT hr = { x - 2, y - 2, x + sz.cx + 2, y + sz.cy + 2 };

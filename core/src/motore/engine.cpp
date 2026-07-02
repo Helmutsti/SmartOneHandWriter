@@ -103,11 +103,22 @@ void Engine::select(int index) {  // dichiarata in M1; qui la teniamo per naviga
 
 void Engine::closeOpen() {
     if (open_ < 0) return;
-    words_[open_].state = WordState::Resolved;
+    const int i = open_;
     open_ = -1;
+    Word& wd = words_[i];
+    // Uno slot rimasto vuoto non deve "colare" nel documento come token vuoto:
+    // lasciare la parola aperta = scartarla.
+    if (wd.cells.empty() && wd.text.empty()) removeWordAt(i);
+    else wd.state = WordState::Resolved;
 }
 
-void Engine::navigatePrev() { closeOpen(); select(sel_ - 1); }
+void Engine::navigatePrev() {
+    // Se l'aperta è uno slot vuoto, closeOpen la rimuove e sposta già la selezione
+    // sulla parola a sinistra: non decrementare oltre.
+    const bool emptySlot = (open_ >= 0 && words_[open_].cells.empty() && words_[open_].text.empty());
+    closeOpen();
+    if (!emptySlot) select(sel_ - 1);
+}
 void Engine::navigateNext() { closeOpen(); select(sel_ + 1); }
 
 void Engine::openSelected() {
@@ -186,17 +197,29 @@ void Engine::punct(const std::string& sym) {
 void Engine::deleteLetter() {
     if (open_ < 0) return;
     Word& wd = words_[open_];
-    if (!wd.cells.empty()) {
+    const bool hasCells = !wd.cells.empty();
+    const bool hasText  = !wd.text.empty();
+
+    // Slot GIÀ vuoto (secondo Canc.): rimuove la parola e seleziona la precedente
+    // (chiusa: non la riapre). È l'unico modo per attraversare il confine di parola.
+    if (!hasCells && !hasText) { const int i = open_; open_ = -1; removeWordAt(i); return; }
+
+    if (hasCells) {
         wd.cells.pop_back();
-        if (wd.cells.empty()) { const int i = open_; open_ = -1; removeWordAt(i); }
-        else recomputeOpen();
+        if (!wd.cells.empty()) { recomputeOpen(); return; }
     } else {
-        // Parola senza celle (es. Loaded aperta): rimuove l'ultimo code point dal testo.
+        // Parola senza celle (Loaded aperta): rimuove l'ultimo code point dal testo.
         std::wstring w = onehand::utf8ToW(wd.text);
         if (!w.empty()) w.pop_back();
         wd.text = onehand::wToUtf8(w);
-        if (wd.text.empty()) { const int i = open_; open_ = -1; removeWordAt(i); }
+        if (!wd.text.empty()) return;
     }
+    // Appena svuotata: NON si rimuove né si chiude. Resta APERTA e VUOTA, pronta a
+    // ridigitare; una Loaded svuotata diventa uno slot Typed riscrivibile (D-decisione 2).
+    wd.origin = WordOrigin::Typed;
+    wd.cands.clear();
+    wd.idx = 0;
+    wd.text.clear();
 }
 
 void Engine::deleteWord() {

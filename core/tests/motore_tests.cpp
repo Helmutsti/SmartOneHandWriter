@@ -163,24 +163,50 @@ int main() {
         assert(e.selection() == 0);
     }
 
-    // --- deleteLetter su parola Loaded aperta (rifila i caratteri) ---------
-    {
-        Engine e; e.loadResolved("ciao"); e.select(0); e.openSelected();
-        e.deleteLetter();
-        assert(e.words()[0].text == "cia");
-        e.deleteLetter(); e.deleteLetter(); e.deleteLetter();   // ci, c, (vuota->rimossa)
-        assert(e.wordCount() == 0 && e.openIndex() == -1);
-    }
-
-    // --- deleteLetter su parola Typed (celle) senza dizionario -------------
+    // --- deleteLetter: svuotare NON rimuove: resta aperta e vuota (Typed) --
     {
         Engine e; e.setMode(true);
         e.typeKey("5"); e.typeKey("2");        // cells [5,2] -> "52" (nessun dict)
         assert(e.words()[0].text == "52" && e.words()[0].cells.size() == 2);
         e.deleteLetter();                       // cells [5] -> "5"
         assert(e.words()[0].text == "5" && e.words()[0].cells.size() == 1);
-        e.deleteLetter();                       // cells vuote -> parola rimossa
+        e.deleteLetter();                       // celle vuote -> resta APERTA e VUOTA (non rimossa)
+        assert(e.wordCount() == 1 && e.openIndex() == 0);
+        assert(e.words()[0].cells.empty() && e.words()[0].text.empty());
+        // pronta a ridigitare sul posto
+        e.typeKey("3");
+        assert(e.wordCount() == 1 && e.openIndex() == 0 && e.words()[0].cells.size() == 1);
+        // svuoto ancora, poi il SECONDO Canc rimuove (qui niente parola prima)
+        e.deleteLetter();                       // -> slot vuoto aperto
+        assert(e.openIndex() == 0 && e.words()[0].text.empty());
+        e.deleteLetter();                       // già vuoto -> rimosso
         assert(e.wordCount() == 0 && e.openIndex() == -1);
+    }
+
+    // --- deleteLetter: secondo Canc su slot vuoto seleziona la precedente --
+    {
+        Engine e; e.loadResolved("ciao");        // parola Loaded (idx0), sel=0
+        e.typeKey("2"); e.typeKey("2");          // nuova parola Typed a idx1 (2 celle)
+        assert(e.wordCount() == 2 && e.openIndex() == 1);
+        e.deleteLetter(); e.deleteLetter();      // -> slot vuoto, ancora aperto
+        assert(e.wordCount() == 2 && e.openIndex() == 1);
+        assert(e.words()[1].cells.empty() && e.words()[1].text.empty());
+        e.deleteLetter();                        // già vuoto -> rimuove e seleziona la precedente (chiusa)
+        assert(e.wordCount() == 1 && e.openIndex() == -1 && e.selection() == 0);
+        assert(e.words()[0].text == "ciao");     // "ciao" intatta, solo selezionata
+    }
+
+    // --- deleteLetter su Loaded: si svuota e diventa Typed riscrivibile ----
+    {
+        Engine e; e.loadResolved("ab"); e.select(0); e.openSelected();  // Loaded aperta
+        e.deleteLetter();                        // "a"
+        assert(e.words()[0].text == "a");
+        e.deleteLetter();                        // "" -> resta aperta e vuota, ora Typed
+        assert(e.wordCount() == 1 && e.openIndex() == 0);
+        assert(e.words()[0].text.empty() && e.words()[0].cells.empty());
+        assert(e.words()[0].origin == WordOrigin::Typed);   // convertita (decisione 2)
+        e.typeKey("2");                          // non più ignorata come Loaded: riscrivibile
+        assert(e.words()[0].cells.size() == 1);
     }
     std::puts("motore_tests: OK (M3 composizione)");
 
