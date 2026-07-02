@@ -11,6 +11,10 @@
 //    T9 come su un cellulare (w=2 e=3 a=4 s=5 d=6 z=7 x=8 c=9); Spazio=0=Conferma
 //    continua; F=Roll G=Conferma R=Avanti T=Apri V/B=Naviga;
 //    Tab/Backspace/BlocMaiusc=cancella; Esc=Scarta; 1..4=. , ? !; 5=Write; `=Read.
+//  - Tre modalità (bottone Modalità): Assistita (T9), Classica (lettere dirette),
+//    Multi-tap (scorrimento lettere: ripremi lo stesso tasto per ciclare le lettere
+//    del gruppo, es. w,w,w = 'c'; per parole fuori dizionario). Multi-tap è Literal
+//    con il ciclo lettere gestito nel FE.
 //  - Read/Write via clipboard (Read = legge; Write = incolla con Ctrl+V).
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -49,6 +53,19 @@ static HWND           g_overlay = nullptr;
 static HWND           g_status = nullptr; // etichetta stato nel pannello
 static HFONT          g_font   = nullptr;
 static HFONT          g_overlayFont = nullptr;
+
+// Modalità d'ingresso del FE. Il MOTORE conosce solo T9 vs Literal: il Multi-tap è
+// Literal (lettere reali) con il ciclo delle lettere fatto qui nel FE.
+enum Mode { MODE_T9 = 0, MODE_CLASSIC, MODE_MULTITAP };
+static Mode            g_mode = MODE_T9;
+static onehand::KeyMap g_keymap;          // gruppi di lettere (serve al multi-tap)
+// Stato del multi-tap (scorrimento lettere): ripremere lo stesso tasto entro la
+// finestra cicla le lettere del gruppo (es. w,w,w = 'c'); dopo la finestra o con un
+// altro tasto la lettera è "fissata" e si passa a una nuova cella.
+static DWORD           g_mtKey  = 0;      // ultimo tasto-gruppo del ciclo (0 = nessuno)
+static int             g_mtIdx  = 0;      // indice lettera corrente nel gruppo
+static DWORD           g_mtTime = 0;      // tick dell'ultima pressione
+static const DWORD     kMultiTapMs = 900; // finestra per ciclare la stessa lettera
 
 struct PaintSpan { std::wstring text; int hl; bool spaceBefore; int typed; };
 static std::vector<PaintSpan> g_spans;
@@ -118,7 +135,10 @@ static void doRead() {
     refreshOverlay();
 }
 
+static void resetMultiTap() { g_mtKey = 0; }   // interrompe il ciclo del multi-tap
+
 static void performAction(Act a) {
+    resetMultiTap();   // qualunque comando chiude il ciclo del multi-tap in corso
     switch (a) {
         case A_NAV_PREV:  g_engine.navigatePrev(); break;
         case A_NAV_NEXT:  g_engine.navigateNext(); break;
@@ -267,10 +287,32 @@ static bool isMapped(DWORD vk) {
     return false;
 }
 
-static bool handleKeyDown(DWORD vk) {
-    const bool assisted = g_engine.assisted();
+// Multi-tap: ripremere lo stesso tasto-gruppo entro la finestra cicla le lettere del
+// gruppo sostituendo l'ultima; un tasto diverso o la scadenza della finestra fissano
+// la lettera e aprono una nuova cella. Alimenta il MOTORE con lettere reali (Literal).
+static void multiTapKey(DWORD vk) {
+    const wchar_t keych = (wchar_t)('a' + (vk - 'A'));       // 'W' -> 'w' (vk è A..Z)
+    auto it = g_keymap.groups.find(keych);
+    const std::wstring grp = (it != g_keymap.groups.end()) ? it->second : std::wstring(1, keych);
+    if (grp.empty()) return;
+    const DWORD now = GetTickCount();
+    if (vk == g_mtKey && (now - g_mtTime) < kMultiTapMs) {
+        // stessa lettera in corso: cicla al glifo successivo (sostituisce l'ultima cella)
+        g_mtIdx = (g_mtIdx + 1) % (int)grp.size();
+        g_engine.deleteLetter();
+        g_engine.typeKey(wToU8(std::wstring(1, grp[(size_t)g_mtIdx])));
+    } else {
+        // nuova lettera: primo glifo del gruppo
+        g_mtIdx = 0;
+        g_engine.typeKey(wToU8(std::wstring(1, grp[0])));
+        g_mtKey = vk;
+    }
+    g_mtTime = now;
+    refreshOverlay();
+}
 
-    // comuni a entrambe le modalità
+static bool handleKeyDown(DWORD vk) {
+    // comuni a tutte le modalità
     switch (vk) {
         case VK_SPACE:   performAction(A_CONTINUE); return true;
         case VK_TAB:     performAction(A_DEL_WORD); return true;
@@ -286,30 +328,35 @@ static bool handleKeyDown(DWORD vk) {
         default: break;
     }
 
-    if (assisted) {
-        // funzioni su lettere (in assistita le lettere non-gruppo sono libere)
-        switch (vk) {
-            case 'F': performAction(A_ROLL);     return true;
-            case 'G': performAction(A_CONFIRM);  return true;
-            case 'R': performAction(A_ADVANCE);  return true;
-            case 'T': performAction(A_OPEN);     return true;
-            case 'V': performAction(A_NAV_PREV); return true;
-            case 'B': performAction(A_NAV_NEXT); return true;
-            default: break;
-        }
-        if (isGroupKey(vk)) {
-            std::string sym; groupSymbol(vk, sym);
-            g_engine.typeKey(sym); refreshOverlay(); return true;
-        }
-        return false;   // altre lettere non usate: lasciale passare
-    } else {
-        // classica: ogni lettera è letterale
+    // Classica: ogni lettera è letterale.
+    if (g_mode == MODE_CLASSIC) {
         if (vk >= 'A' && vk <= 'Z') {
             std::string sym; groupSymbol(vk, sym);
             g_engine.typeKey(sym); refreshOverlay(); return true;
         }
         return false;
     }
+
+    // T9 e Multi-tap: le lettere non-gruppo fanno da tasti funzione.
+    switch (vk) {
+        case 'F': performAction(A_ROLL);     return true;
+        case 'G': performAction(A_CONFIRM);  return true;
+        case 'R': performAction(A_ADVANCE);  return true;
+        case 'T': performAction(A_OPEN);     return true;
+        case 'V': performAction(A_NAV_PREV); return true;
+        case 'B': performAction(A_NAV_NEXT); return true;
+        default: break;
+    }
+    if (isGroupKey(vk)) {
+        if (g_mode == MODE_MULTITAP) {
+            multiTapKey(vk);                 // scorrimento lettere del gruppo
+        } else {                             // MODE_T9: il tasto-gruppo va al dizionario
+            std::string sym; groupSymbol(vk, sym);
+            g_engine.typeKey(sym); refreshOverlay();
+        }
+        return true;
+    }
+    return false;   // altre lettere non usate: lasciale passare
 }
 
 // ------------------------------------------------------------------ pannello
@@ -322,7 +369,10 @@ enum {
 static void setStatus() {
     std::wstring s = L"Stato: ";
     s += g_active ? L"ATTIVO" : L"in pausa";
-    s += g_engine.assisted() ? L"  |  Modalità: Assistita (T9)" : L"  |  Modalità: Classica";
+    s += L"  |  Modalità: ";
+    s += (g_mode == MODE_T9)      ? L"Assistita (T9)"
+       : (g_mode == MODE_CLASSIC) ? L"Classica"
+                                  : L"Multi-tap (scorrimento lettere)";
     SetWindowTextW(g_status, s.c_str());
 }
 static void togglePlay() {
@@ -382,7 +432,12 @@ static LRESULT CALLBACK PanelProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         case WM_COMMAND: {
             switch (LOWORD(wp)) {
                 case IDB_PLAY: togglePlay(); break;
-                case IDB_MODE: g_engine.setMode(!g_engine.assisted()); setStatus(); break;
+                case IDB_MODE:
+                    g_mode = (Mode)((g_mode + 1) % 3);   // T9 -> Classica -> Multi-tap
+                    g_engine.setMode(g_mode == MODE_T9); // T9 vs Literal (Classica/Multi-tap)
+                    resetMultiTap();
+                    setStatus();
+                    break;
                 case IDB_PREV:    performAction(A_NAV_PREV); break;
                 case IDB_NEXT:    performAction(A_NAV_NEXT); break;
                 case IDB_OPEN:    performAction(A_OPEN); break;
@@ -432,7 +487,8 @@ static onehand::KeyMap buildKeymap() {
 int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int show) {
     // --- MOTORE ---
     onehand::Config cfg;
-    cfg.keymap = buildKeymap();
+    g_keymap = buildKeymap();      // tenuto anche nel FE per il multi-tap
+    cfg.keymap = g_keymap;
     cfg.maxCandidates = 8;
     g_engine.setConfig(cfg);                    // PRIMA di caricare i dati
     { std::ifstream wl(dataPath("wordlist_it.txt"), std::ios::binary);

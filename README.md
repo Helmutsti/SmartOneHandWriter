@@ -153,16 +153,21 @@ riquadro in sovraimpressione, e lo scrive nell'app attiva quando glielo chiedi.
 
 - Premi **Play/Pause** sul pannello per accendere (intercetta la tastiera) o
   mettere in pausa (i tasti tornano normali).
-- **Modalità** alterna **Assistita (T9)** e **Classica**.
+- **Modalità** cicla tra **Assistita (T9)**, **Classica** e **Multi-tap**.
 
-## Le due modalità
+## Le tre modalità
 
 - **Assistita (T9)**: come su un **cellulare**. Gli 8 tasti `w e / a s d / z x c`
   fanno da tasti **2–9** (`w`=2=abc, `e`=3=def, `a`=4=ghi, `s`=5=jkl, `d`=6=mno,
   `z`=7=pqrs, `x`=8=tuv, `c`=9=wxyz) e lo **Spazio** è lo `0`. Premi **un** tasto per
   lettera e il dizionario indovina la parola; **Roll** cicla le alternative.
+- **Multi-tap (scorrimento lettere)**: stessi 8 tasti, ma **ripremendo** lo stesso
+  tasto scorri le lettere del gruppo (come sui vecchi cellulari): `w`=a, `w w`=b,
+  `w w w`=c. Aspetta un istante (o cambia tasto) per fissare la lettera e passare
+  alla successiva. Serve per scrivere **esattamente** ciò che vuoi, es. nomi e parole
+  fuori dizionario.
 - **Classica**: ogni lettera `a`–`z` vale se stessa, con completamento; il primo
-  candidato è sempre ciò che hai digitato (utile per nomi e parole fuori dizionario).
+  candidato è sempre ciò che hai digitato.
 
 ## I tasti (modalità assistita)
 
