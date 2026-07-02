@@ -1,6 +1,8 @@
 #include "motore/engine.hpp"
 #include "utf8.hpp"   // onehand::utf8ToW / wToUtf8 (via sohw_core -> onehand_core)
 
+#include <algorithm>
+
 namespace motore {
 
 // ------------------------------------------------------------------ classificazione
@@ -62,7 +64,7 @@ void Engine::setMode(bool assisted) {
 }
 
 // ------------------------------------------------------------------ documento (M1)
-void Engine::clear() { words_.clear(); sel_ = -1; open_ = -1; }
+void Engine::clear() { words_.clear(); sel_ = -1; open_ = -1; nextSel_ = -1; }
 
 void Engine::loadResolved(const std::string& utf8Text) {
     clear();
@@ -94,6 +96,7 @@ void Engine::loadResolved(const std::string& utf8Text) {
 
 // ------------------------------------------------------------------ cursori / azioni
 void Engine::select(int index) {  // dichiarata in M1; qui la teniamo per navigazione
+    nextSel_ = -1;
     if (words_.empty()) { sel_ = -1; return; }
     if (index < 0) index = 0;
     const int last = static_cast<int>(words_.size()) - 1;
@@ -122,6 +125,7 @@ void Engine::navigatePrev() {
 void Engine::navigateNext() { closeOpen(); select(sel_ + 1); }
 
 void Engine::openSelected() {
+    nextSel_ = -1;
     if (sel_ < 0 || sel_ >= static_cast<int>(words_.size())) return;
     open_ = sel_;
     words_[open_].state = WordState::Open;
@@ -129,14 +133,21 @@ void Engine::openSelected() {
 }
 
 void Engine::roll() {
-    if (open_ < 0) return;
-    Word& wd = words_[open_];
-    if (wd.cands.size() < 2) return;
-    wd.idx = (wd.idx + 1) % static_cast<int>(wd.cands.size());
-    wd.text = wd.cands[wd.idx];
+    // Parola aperta con candidati: cicla il candidato mostrato.
+    if (!nextWordActive()) {
+        Word& wd = words_[open_];
+        if (wd.cands.size() < 2) return;
+        wd.idx = (wd.idx + 1) % static_cast<int>(wd.cands.size());
+        wd.text = wd.cands[wd.idx];
+        return;
+    }
+    // Altrimenti: scorre l'evidenziatore sulla riga next-word.
+    const int n = static_cast<int>(computeNextWords(maxSug_).size());
+    nextSel_ = (n <= 0) ? -1 : (nextSel_ + 1) % n;
 }
 
 void Engine::typeKey(const std::string& sym) {
+    nextSel_ = -1;
     // Nessuna parola aperta → apri una nuova parola Typed subito dopo la selezione.
     if (open_ < 0) {
         Word wd;
@@ -165,15 +176,21 @@ void Engine::removeWordAt(int i) {
 }
 
 void Engine::confirm() {
-    if (open_ < 0) return;
+    // Riga suggerimenti in modo next-word: se una voce è evidenziata, Conferma la inserisce;
+    // se è aperto uno slot vuoto senza scelta, lo scarta.
+    if (nextWordActive()) {
+        if (nextSel_ >= 0) { acceptSuggestion(nextSel_); return; }
+        if (open_ >= 0) { const int i = open_; open_ = -1; removeWordAt(i); }
+        return;
+    }
+    // Parola aperta con contenuto: chiude al candidato corrente (già in wd.text) e resta.
     const int i = open_;
     open_ = -1;
-    Word& wd = words_[i];
-    if (wd.cells.empty() && wd.text.empty()) removeWordAt(i);   // parola vuota: rimuovi
-    else wd.state = WordState::Resolved;                         // altrimenti chiudi e resta
+    words_[i].state = WordState::Resolved;
 }
 
 void Engine::advance() {
+    nextSel_ = -1;                               // "avanti" non accetta un next-word
     confirm();                                   // chiude l'eventuale parola aperta
     Word wd;
     wd.cls = WordClass::Text; wd.state = WordState::Open; wd.origin = WordOrigin::Typed;
@@ -185,6 +202,7 @@ void Engine::advance() {
 void Engine::confirmContinue() { advance(); }    // = conferma + avanti
 
 void Engine::punct(const std::string& sym) {
+    nextSel_ = -1;
     confirm();
     Word p;
     p.cls = WordClass::Punct; p.state = WordState::Resolved; p.origin = WordOrigin::Typed; p.text = sym;
@@ -195,6 +213,7 @@ void Engine::punct(const std::string& sym) {
 }
 
 void Engine::deleteLetter() {
+    nextSel_ = -1;
     if (open_ < 0) return;
     Word& wd = words_[open_];
     const bool hasCells = !wd.cells.empty();
@@ -223,8 +242,59 @@ void Engine::deleteLetter() {
 }
 
 void Engine::deleteWord() {
+    nextSel_ = -1;
     if (sel_ < 0) return;
     removeWordAt(sel_);
+}
+
+// ------------------------------------------------------------------ suggerimenti / next-word
+bool Engine::nextWordActive() const {
+    // Riga in modo next-word quando non c'è parola aperta o è uno slot vuoto.
+    return open_ < 0 || (words_[open_].cells.empty() && words_[open_].text.empty());
+}
+
+std::vector<std::string> Engine::computeNextWords(int n) const {
+    // Punto d'inserimento: lo slot aperto se c'è, altrimenti subito dopo la selezione.
+    int at = (open_ >= 0) ? open_ : (sel_ + 1);
+    if (at < 0) at = 0;
+    if (at > static_cast<int>(words_.size())) at = static_cast<int>(words_.size());
+    sohw::Context ctx{ joinRange(words_, 0, at),
+                       joinRange(words_, at, static_cast<int>(words_.size())) };
+    std::vector<std::string> out;
+    for (const auto& s : core_.nextWords(ctx, n)) out.push_back(s.word);
+    return out;
+}
+
+void Engine::acceptSuggestion(int k) {
+    // Candidati della parola aperta: scegli k e conferma (resta sul posto).
+    if (open_ >= 0 && !words_[open_].cands.empty()) {
+        Word& wd = words_[open_];
+        if (k < 0 || k >= static_cast<int>(wd.cands.size())) return;
+        wd.idx = k;
+        wd.text = wd.cands[k];
+        confirm();
+        return;
+    }
+    // Next-word: inserisci la parola scelta come risolta, poi apri una nuova a destra.
+    std::vector<std::string> nx = computeNextWords(maxSug_);
+    if (k < 0 || k >= static_cast<int>(nx.size())) return;
+    nextSel_ = -1;
+    if (open_ >= 0) {
+        // Riempi lo slot vuoto aperto con la parola scelta.
+        Word& wd = words_[open_];
+        wd.cells.clear(); wd.cands.clear(); wd.idx = 0;
+        wd.text = nx[k];
+        wd.cls = WordClass::Text; wd.origin = WordOrigin::Typed; wd.state = WordState::Resolved;
+        sel_ = open_; open_ = -1;
+    } else {
+        Word wd;
+        wd.cls = WordClass::Text; wd.state = WordState::Resolved; wd.origin = WordOrigin::Typed;
+        wd.text = nx[k];
+        const int at = (sel_ < 0) ? 0 : sel_ + 1;
+        words_.insert(words_.begin() + at, std::move(wd));
+        sel_ = at;
+    }
+    advance();   // apre una nuova parola vuota a destra, pronta per il prossimo next-word
 }
 
 // ------------------------------------------------------------------ integrazione CORE
@@ -287,6 +357,19 @@ RenderModel Engine::render() const {
     for (const auto& s : r.spans) {
         if (s.spaceBefore) r.fullText.push_back(' ');
         r.fullText += s.text;
+    }
+
+    // Riga suggerimenti: candidati della parola aperta, oppure next-word dal contesto.
+    if (nextWordActive()) {
+        r.suggestions = computeNextWords(maxSug_);
+        r.suggestionSel = nextSel_;
+        r.suggestionsAreNext = true;
+    } else {
+        const Word& wd = words_[open_];
+        const int lim = std::min<int>(maxSug_, static_cast<int>(wd.cands.size()));
+        r.suggestions.assign(wd.cands.begin(), wd.cands.begin() + lim);
+        r.suggestionSel = (wd.idx < lim) ? wd.idx : (lim > 0 ? 0 : -1);
+        r.suggestionsAreNext = false;
     }
     return r;
 }

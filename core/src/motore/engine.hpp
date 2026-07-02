@@ -46,7 +46,10 @@ public:
     void navigateNext();
     void openSelected();   // apre la selezionata; se Typed con celle, ricalcola i candidati
     void closeOpen();      // chiude l'eventuale parola aperta (Resolved)
-    void roll();           // cicla i candidati della parola aperta
+    void roll();           // parola aperta: cicla i candidati; altrimenti: scorre la riga next-word
+    // Sceglie la voce k della riga suggerimenti: se sono candidati della parola aperta
+    // la conferma; se sono next-word inserisce quella parola (risolta) e apre una nuova a destra.
+    void acceptSuggestion(int k);
     // Digita un simbolo: se nessuna parola è aperta ne apre una nuova; ignora se la
     // parola aperta è Loaded (D11-ii). Ricalcola i candidati via CORE.
     void typeKey(const std::string& sym);
@@ -71,14 +74,18 @@ public:
 private:
     void recomputeOpen();                 // interroga il CORE e aggiorna cands/idx/text della parola aperta
     void removeWordAt(int index);         // rimuove una parola aggiustando sel_/open_
+    bool nextWordActive() const;          // true = riga suggerimenti in modo next-word
+    std::vector<std::string> computeNextWords(int n) const;  // predizioni dal contesto
 
     sohw::Core        core_;
     bool              assisted_ = true;
     int               maxCands_ = 8;
+    int               maxSug_   = 6;       // voci mostrate nella riga suggerimenti
 
     std::vector<Word> words_;
-    int sel_  = -1;
-    int open_ = -1;
+    int sel_     = -1;
+    int open_    = -1;
+    int nextSel_ = -1;   // evidenziatore della riga next-word (mosso dal Roll)
 };
 
 } // namespace motore

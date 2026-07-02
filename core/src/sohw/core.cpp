@@ -122,4 +122,12 @@ CoreResult Core::process(const Context& ctx, const std::string& encoded,
     return res;
 }
 
+std::vector<Suggestion> Core::nextWords(const Context& ctx, int n) const {
+    PredictContext pctx;
+    pctx.leftWords  = tokenize(ctx.left);
+    pctx.rightWords = tokenize(ctx.right);
+    pctx.sentenceStart = pctx.leftWords.empty();
+    return impl_->predictor.predictNext(pctx, n);
+}
+
 } // namespace sohw

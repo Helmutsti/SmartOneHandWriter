@@ -47,6 +47,10 @@ public:
     CoreResult process(const Context& ctx, const std::string& encoded,
                        int topK = 8, int nextN = 5) const;
 
+    // Predizioni della parola successiva dal solo contesto (nessuna parola codificata):
+    // serve quando non si sta digitando (posizione vuota) per suggerire cosa scrivere.
+    std::vector<Suggestion> nextWords(const Context& ctx, int n = 6) const;
+
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;

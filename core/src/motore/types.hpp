@@ -45,6 +45,13 @@ struct RenderModel {
     std::vector<RenderSpan> spans;
     int selection = -1;   // indice parola selezionata (-1 se documento vuoto)
     int open      = -1;   // indice parola aperta (-1 se nessuna)
+
+    // Riga di suggerimenti sotto il testo. Se una parola aperta ha lettere, sono i
+    // suoi candidati (scegliere = quel candidato); se non c'è parola aperta o è vuota,
+    // sono le predizioni della parola successiva (scegliere = inserisce + avanza).
+    std::vector<std::string> suggestions;
+    int  suggestionSel     = -1;      // voce evidenziata nella riga (-1 = nessuna)
+    bool suggestionsAreNext = false;  // true = next-word; false = candidati della parola aperta
 };
 
 } // namespace motore

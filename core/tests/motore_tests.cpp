@@ -221,6 +221,36 @@ int main() {
     }
     std::puts("motore_tests: OK (M4 read/write)");
 
+    // ================= M5: riga suggerimenti / next-word ==================
+
+    // --- candidati della parola aperta (classica: letterale primo) --------
+    {
+        Engine e; e.setMode(false);            // classica (Literal), nessun dizionario
+        e.typeKey("a"); e.typeKey("b");        // "ab"
+        RenderModel r = e.render();
+        assert(!r.suggestionsAreNext);
+        assert(!r.suggestions.empty() && r.suggestions[0] == "ab");   // letterale primo
+        assert(r.suggestionSel == 0);
+        e.acceptSuggestion(0);                 // scegliere il candidato = conferma e resta
+        assert(e.openIndex() == -1 && e.words()[0].text == "ab");
+        assert(e.words()[0].state == WordState::Resolved);
+    }
+
+    // --- nessuna parola aperta -> riga in modo next-word -------------------
+    {
+        Engine e; e.loadResolved("ciao");      // sel=0, nessuna aperta
+        assert(e.render().suggestionsAreNext);
+    }
+
+    // --- slot vuoto aperto -> riga in modo next-word ----------------------
+    {
+        Engine e; e.setMode(true);
+        e.typeKey("5"); e.deleteLetter();      // slot vuoto aperto
+        assert(e.openIndex() == 0 && e.words()[0].text.empty());
+        assert(e.render().suggestionsAreNext);
+    }
+    std::puts("motore_tests: OK (M5 suggerimenti)");
+
     // --- integrazione col CORE reale (se i dati sono presenti) -------------
 #ifdef SOHW_DATA_DIR
     {
@@ -261,6 +291,22 @@ int main() {
             assert(hasCasa);
             std::printf("motore_tests: integrazione OK (per+52 -> '%s'; classica 'cas' -> %zu cand)\n",
                         e.words()[1].text.c_str(), cw.cands.size());
+
+            // next-word dal contesto: "per" -> suggerimenti non vuoti; scegliere inserisce + avanza
+            Engine n;
+            std::ifstream wl3(dir + "/wordlist_it.txt", std::ios::binary);
+            n.loadWordlist(wl3);
+            n.loadBigramModel(dir + "/it.bigrams.bin");
+            n.setMode(true);
+            n.loadResolved("per");           // sel=0, nessuna aperta
+            RenderModel rn = n.render();
+            assert(rn.suggestionsAreNext && !rn.suggestions.empty());
+            const int before = n.wordCount();
+            n.roll();                        // evidenzia il primo next-word
+            n.confirm();                     // inserisce il next-word evidenziato + apre uno slot
+            assert(n.wordCount() >= before + 1);
+            std::printf("motore_tests: next-word OK ('per' -> '%s', %zu suggerimenti)\n",
+                        rn.suggestions[0].c_str(), rn.suggestions.size());
         } else {
             std::puts("motore_tests: integrazione SALTATA (wordlist reale assente)");
         }

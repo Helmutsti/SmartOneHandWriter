@@ -70,6 +70,18 @@ static const DWORD     kMultiTapMs = 900; // finestra per ciclare la stessa lett
 struct PaintSpan { std::wstring text; int hl; bool spaceBefore; int typed; };
 static std::vector<PaintSpan> g_spans;
 
+// Riga suggerimenti (candidati della parola aperta o next-word).
+static std::vector<std::wstring> g_sugg;
+static int  g_sugSel  = -1;      // voce evidenziata
+static bool g_sugNext = false;   // true = next-word
+static HFONT g_sugFont = nullptr;
+// Aree cliccabili delle voci della riga suggerimenti (x0..x1 -> indice).
+struct SugHit { int x0, x1, idx; };
+static std::vector<SugHit> g_sugHit;
+
+// geometria overlay: riga testo in alto, riga suggerimenti sotto
+static const int kSugBandTop = 38;   // sopra = testo (trascinabile), sotto = suggerimenti (cliccabili)
+
 // colori
 static const COLORREF kBg     = RGB(43, 43, 43);
 static const COLORREF kFg     = RGB(240, 240, 240);
@@ -77,6 +89,8 @@ static const COLORREF kSelBg  = RGB(58, 110, 165);   // azzurro
 static const COLORREF kOpenBg = RGB(217, 164, 65);   // ambra
 static const COLORREF kTyped  = RGB(30, 30, 30);     // sottolineatura del prefisso digitato
 static const COLORREF kTail   = RGB(90, 74, 40);     // completamento (coda) attenuato, su ambra
+static const COLORREF kSugFg  = RGB(150, 150, 150);  // suggerimenti non evidenziati
+static const COLORREF kSugSel = RGB(58, 110, 165);   // sfondo del suggerimento evidenziato
 
 // ------------------------------------------------------------------ azioni
 enum Act {
@@ -168,6 +182,11 @@ static void refreshOverlay() {
     for (const auto& s : r.spans)
         g_spans.push_back({ u8ToW(s.text), (int)s.hl, s.spaceBefore, s.typedCount });
 
+    g_sugg.clear();
+    for (const auto& w : r.suggestions) g_sugg.push_back(u8ToW(w));
+    g_sugSel  = r.suggestionSel;
+    g_sugNext = r.suggestionsAreNext;
+
     if (g_engine.empty()) { ShowWindow(g_overlay, SW_HIDE); return; }
 
     // resta dove l'utente l'ha lasciato (trascinabile): mostra senza spostare né ridimensionare
@@ -237,14 +256,51 @@ static void paintOverlay(HWND hwnd) {
         }
         x += sz.cx;
     }
+
+    // --- riga suggerimenti (sotto, font piccolo) --------------------------------
+    g_sugHit.clear();
+    SelectObject(hdc, g_sugFont ? g_sugFont : g_overlayFont);
+    int sx = 6; const int sy = kSugBandTop + 3;
+    for (int i = 0; i < (int)g_sugg.size(); ++i) {
+        const std::wstring& t = g_sugg[i];
+        SIZE sz; GetTextExtentPoint32W(hdc, t.c_str(), (int)t.size(), &sz);
+        if (sx + sz.cx > rc.right - 6) break;   // troncamento se non ci stanno
+        if (i == g_sugSel) {
+            RECT hr = { sx - 3, sy - 1, sx + sz.cx + 3, sy + sz.cy + 1 };
+            HBRUSH hb = CreateSolidBrush(kSugSel);
+            FillRect(hdc, &hr, hb); DeleteObject(hb);
+        }
+        SetTextColor(hdc, i == g_sugSel ? kFg : kSugFg);
+        TextOutW(hdc, sx, sy, t.c_str(), (int)t.size());
+        g_sugHit.push_back({ sx - 3, sx + sz.cx + 3, i });
+        sx += sz.cx + 14;
+    }
+
     SelectObject(hdc, old);
     EndPaint(hwnd, &ps);
 }
 
+static void overlayClick(int x, int y) {
+    if (y < kSugBandTop) return;                 // banda del testo: gestita come drag
+    for (const auto& h : g_sugHit) {
+        if (x >= h.x0 && x <= h.x1) {
+            resetMultiTap();
+            g_engine.acceptSuggestion(h.idx);    // scegli dalla lista visibile
+            refreshOverlay();
+            return;
+        }
+    }
+}
+
 static LRESULT CALLBACK OverlayProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     if (msg == WM_PAINT) { paintOverlay(hwnd); return 0; }
-    // Tutta la finestra fa da "barra del titolo": premi e trascina per spostarla.
-    if (msg == WM_NCHITTEST) return HTCAPTION;
+    // Banda del testo (in alto) = trascinabile; banda dei suggerimenti (in basso) = cliccabile.
+    if (msg == WM_NCHITTEST) {
+        POINT pt = { (short)LOWORD(lp), (short)HIWORD(lp) };   // coord. schermo
+        ScreenToClient(hwnd, &pt);
+        return (pt.y >= kSugBandTop) ? HTCLIENT : HTCAPTION;
+    }
+    if (msg == WM_LBUTTONDOWN) { overlayClick((short)LOWORD(lp), (short)HIWORD(lp)); return 0; }
     return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
@@ -503,6 +559,9 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int show) {
     g_overlayFont = CreateFontW(-20, 0, 0, 0, FW_SEMIBOLD, 0, 0, 0, DEFAULT_CHARSET,
                          OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
                          DEFAULT_PITCH | FF_DONTCARE, L"Consolas");
+    g_sugFont = CreateFontW(-14, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET,
+                         OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
+                         DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
 
     // --- overlay window ---
     WNDCLASSEXW oc = { sizeof(oc) };
@@ -512,7 +571,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int show) {
     RegisterClassExW(&oc);
     // Niente WS_EX_TRANSPARENT: la finestra riceve il mouse ed è trascinabile.
     // WS_EX_NOACTIVATE: trascinarla non ruba il focus all'app in cui si scrive.
-    const int OVW = 900, OVH = 40;
+    const int OVW = 900, OVH = 66;   // riga testo + riga suggerimenti
     const int sw = GetSystemMetrics(SM_CXSCREEN), sh = GetSystemMetrics(SM_CYSCREEN);
     g_overlay = CreateWindowExW(WS_EX_TOPMOST | WS_EX_LAYERED |
                                 WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE,
@@ -546,5 +605,6 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int show) {
     if (g_hook) UnhookWindowsHookEx(g_hook);
     if (g_font) DeleteObject(g_font);
     if (g_overlayFont) DeleteObject(g_overlayFont);
+    if (g_sugFont) DeleteObject(g_sugFont);
     return 0;
 }
