@@ -542,7 +542,31 @@ Tuning residuo: pesi interpolazione (0.55/0.25/0.20) e pruning bigrammi (K=64, m
   conferma, Roll, cancellazioni…). È la fase esplicitamente rinviata; il CORE è progettato per essere
   pilotato dall'esterno (stateless) proprio per questo.
 
-### 21.4 Puntatori
+### 21.4 Backlog sospeso (sviluppo CORE in PAUSA)
+Lo sviluppo del CORE è **sospeso** dopo M1–M7 + gruppo A + blocchi ad alta priorità (tutti committati,
+`9a80e28`). Punti tenuti per il futuro, per priorità:
+
+- **Media**
+  - Trigrammi (contesto oltre l'immediato) — o direttamente il backend BERT.
+  - Taratura di pesi interpolazione (0.55/0.25/0.20) e pruning (K=64, minCount=2) su casi reali; valutare
+    smoothing vero (Kneser-Ney/backoff) al posto dell'interpolazione lineare.
+  - Esporre i parametri (`pesi`, `topK`, `nextN`, filtro punteggiatura, completamento, skip-punteggiatura)
+    da `config.json` (oggi solo via API `Core::set*`).
+  - Frontend: compilare la GUI **Qt** (serve Qt6); la GUI **Win32** è solo un banco (mostra il next del
+    solo match in cima, niente click-per-scegliere, non ridimensionabile); **macOS** non allineato al CORE.
+  - Disallineamento sorgenti: unigrammi (OpenSubtitles) vs bigrammi (file 2009) — euristico.
+- **Bassa**
+  - Verifica build su Linux/macOS (il CORE è portabile; `build_bigrams` gestisce lo stdin binario solo
+    sotto `_WIN32`).
+  - Test che carichi la **DLL** `smartcore_c` a runtime da un altro linguaggio (ora solo link statico).
+  - `data/it.bigrams.bin` non versionato: da rigenerare su clone pulito (o degradare a sola frequenza).
+  - Helper opzionale di capitalizzazione (A6), se servirà.
+- **Roadmap grande**
+  - Backend **BERT** dietro `IPredictor` (userebbe pienamente il contesto destro/bidirezionale).
+  - Il **MOTORE**: macchina a stati che usa il CORE per editare il testo (inserimento, conferma, Roll,
+    cancellazioni, gestione documento).
+
+### 21.5 Puntatori
 - Piano operativo: `~/.claude/plans/twinkling-snuggling-feather.md`.
 - Memoria di sessione: `…/memory/core-nuova-concezione.md` (+ indice `MEMORY.md`).
 - Commit di riferimento: `45cd8e3`.
