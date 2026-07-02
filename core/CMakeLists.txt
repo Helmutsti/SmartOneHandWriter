@@ -29,6 +29,13 @@ target_include_directories(sohw_core
 )
 target_link_libraries(sohw_core PUBLIC onehand_core)
 
+# --- MOTORE: macchina a stati sopra il CORE (strato condiviso) ----------------
+add_library(motore_core STATIC
+    src/motore/engine.cpp
+)
+target_include_directories(motore_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(motore_core PUBLIC sohw_core)
+
 # --- C ABI opzionale: per frontend in altri linguaggi (Swift/C#/Rust) --------
 # Non serve al frontend C++. Attivala con -DONEHAND_BUILD_C_ABI=ON.
 option(ONEHAND_BUILD_C_ABI "Build the optional C ABI shared library (onehand_c)" OFF)
@@ -70,6 +77,10 @@ if(ONEHAND_BUILD_TESTS)
     add_executable(provider_tests tests/provider_tests.cpp)
     target_link_libraries(provider_tests PRIVATE sohw_core)
     add_test(NAME provider_tests COMMAND provider_tests)
+
+    add_executable(motore_tests tests/motore_tests.cpp)
+    target_link_libraries(motore_tests PRIVATE motore_core)
+    add_test(NAME motore_tests COMMAND motore_tests)
 
     add_executable(bigram_tests tests/bigram_tests.cpp)
     target_link_libraries(bigram_tests PRIVATE sohw_core)

@@ -128,7 +128,10 @@ nuovo `motore_c.h` versionato.
   tasto "Maiuscola" manuale (responsabilità del MOTORE al render).
 
 ## 9. Milestone (proposta)
-1. Modello dati + due cursori + render model; test headless (senza GUI).
+1. ✅ **FATTO** — Modello dati + due cursori + render model + tokenizzazione (Strategia A) e regole di
+   spaziatura; test headless. Codice in `core/src/motore/` (`types.hpp`, `engine.{hpp,cpp}`), lib
+   `motore_core` sopra `sohw_core`, test `motore_tests` (7/7 verdi). `loadResolved` popola il documento;
+   `select`/`openSelected`/`closeOpen` sono primitive minime (M2 completerà la semantica).
 2. Azioni di navigazione/apertura/roll + integrazione `sohw::Core` per i candidati.
 3. `TypeKey` + `Confirm`/`Advance`/`ConfirmContinue` (§3) + cancellazioni; test dei percorsi.
 4. `Read` (parse testo → parole Resolved) e `Write` (stringa completa resa; il FE incolla via clipboard).
