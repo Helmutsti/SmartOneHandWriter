@@ -80,6 +80,7 @@ if(ONEHAND_BUILD_TESTS)
 
     add_executable(motore_tests tests/motore_tests.cpp)
     target_link_libraries(motore_tests PRIVATE motore_core)
+    target_compile_definitions(motore_tests PRIVATE SOHW_DATA_DIR="${CMAKE_SOURCE_DIR}/data")
     add_test(NAME motore_tests COMMAND motore_tests)
 
     add_executable(bigram_tests tests/bigram_tests.cpp)

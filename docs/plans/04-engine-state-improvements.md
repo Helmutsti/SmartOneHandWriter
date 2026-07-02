@@ -132,7 +132,11 @@ nuovo `motore_c.h` versionato.
    spaziatura; test headless. Codice in `core/src/motore/` (`types.hpp`, `engine.{hpp,cpp}`), lib
    `motore_core` sopra `sohw_core`, test `motore_tests` (7/7 verdi). `loadResolved` popola il documento;
    `select`/`openSelected`/`closeOpen` sono primitive minime (M2 completerà la semantica).
-2. Azioni di navigazione/apertura/roll + integrazione `sohw::Core` per i candidati.
+2. ✅ **FATTO** — Navigazione (`navigatePrev/Next` con auto-conferma), `openSelected` (ricalcolo
+   candidati), `roll`, `typeKey` (auto-open, celle, ignora Loaded per D11-ii) + **integrazione
+   `sohw::Core`** (contesto left/right dai vicini risolti, `encoded` dalle celle) e regola "letterale
+   primo" in classica. Test hermetici + integrazione reale (per+52→"la"; classica "cas" con letterale
+   primo). 7/7 verdi.
 3. `TypeKey` + `Confirm`/`Advance`/`ConfirmContinue` (§3) + cancellazioni; test dei percorsi.
 4. `Read` (parse testo → parole Resolved) e `Write` (stringa completa resa; il FE incolla via clipboard).
 5. C ABI del MOTORE + driver di test headless.

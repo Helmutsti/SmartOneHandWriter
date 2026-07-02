@@ -5,6 +5,7 @@
 
 #include <cassert>
 #include <cstdio>
+#include <fstream>
 #include <string>
 
 using namespace motore;
@@ -98,5 +99,76 @@ int main() {
     }
 
     std::puts("motore_tests: OK (M1 modello dati + render + tokenizzazione)");
+
+    // ================= M2: azioni + integrazione CORE =====================
+
+    // --- hermetico: T9 senza dizionario -> fallback al codice --------------
+    {
+        Engine e;
+        e.setMode(true);                 // assistita, nessuna wordlist caricata
+        e.typeKey("5"); e.typeKey("2");  // apre una nuova parola e digita "52"
+        assert(e.wordCount() == 1);
+        assert(e.openIndex() == 0);
+        assert(e.words()[0].origin == WordOrigin::Typed);
+        assert(e.words()[0].cands.empty());
+        assert(e.words()[0].text == "52");   // nessun candidato -> mostra il codice
+    }
+
+    // --- hermetico: non si digita dentro una parola Loaded (D11-ii) --------
+    {
+        Engine e;
+        e.loadResolved("ciao");
+        e.select(0); e.openSelected();       // Loaded aperta (nessuna cella)
+        e.typeKey("5");                       // deve essere ignorato
+        assert(e.words()[0].text == "ciao");
+        assert(e.words()[0].cells.empty());
+    }
+    std::puts("motore_tests: OK (M2 hermetico)");
+
+    // --- integrazione col CORE reale (se i dati sono presenti) -------------
+#ifdef SOHW_DATA_DIR
+    {
+        const std::string dir = SOHW_DATA_DIR;
+        std::ifstream wl(dir + "/wordlist_it.txt", std::ios::binary);
+        if (wl) {
+            Engine e;
+            e.loadWordlist(wl);
+            e.loadBigramModel(dir + "/it.bigrams.bin");
+            e.setMode(true);                 // assistita
+            e.loadResolved("per");           // contesto sinistro
+            assert(e.selection() == 0);
+            e.typeKey("5"); e.typeKey("2");  // codice T9 di "la" (l=5, a=2)
+            assert(e.openIndex() == 1);
+            const Word& wd = e.words()[1];
+            assert(!wd.cands.empty());
+            assert(wd.cands[0] == "la");     // il contesto "per" porta "la" in cima
+            assert(wd.text == "la");
+            assert(e.render().fullText == "per la");
+            // Roll cambia candidato.
+            assert(wd.cands.size() >= 2);
+            e.roll();
+            assert(e.words()[1].text == e.words()[1].cands[1]);
+            // Navigazione auto-conferma la parola aperta.
+            e.navigatePrev();
+            assert(e.openIndex() == -1 && e.selection() == 0);
+
+            // Classica: il testo letterale è sempre il primo candidato (B6).
+            Engine c;
+            std::ifstream wl2(dir + "/wordlist_it.txt", std::ios::binary);
+            c.loadWordlist(wl2);
+            c.setMode(false);                // classica
+            c.typeKey("c"); c.typeKey("a"); c.typeKey("s");
+            const Word& cw = c.words()[0];
+            assert(cw.cands[0] == "cas");    // letterale primo
+            bool hasCasa = false;
+            for (const auto& x : cw.cands) if (x == "casa") hasCasa = true;
+            assert(hasCasa);
+            std::printf("motore_tests: integrazione OK (per+52 -> '%s'; classica 'cas' -> %zu cand)\n",
+                        e.words()[1].text.c_str(), cw.cands.size());
+        } else {
+            std::puts("motore_tests: integrazione SALTATA (wordlist reale assente)");
+        }
+    }
+#endif
     return 0;
 }

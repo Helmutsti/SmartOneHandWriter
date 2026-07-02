@@ -1,14 +1,17 @@
 // SmartOneHandWriter - MOTORE (macchina a stati sopra il CORE).
 //
-// MILESTONE 1: modello dati + cursori (sel/open) + render model + tokenizzazione
-// (Strategia A degli apostrofi) e regole di spaziatura. Le azioni complete
-// (Roll/Confirm/Advance/ConfirmContinue/Punct/TypeKey/Write, integrazione con
-// sohw::Core) arrivano nelle milestone successive. Vedi
-// docs/plans/04-engine-state-improvements.md.
+// M1: modello dati + cursori + render + tokenizzazione (Strategia A).
+// M2: navigazione / apertura / Roll + integrazione con sohw::Core per i candidati
+//     contestuali della parola aperta; digitazione (typeKey) e regola "letterale
+//     primo" in modalità classica.
+// M3 (futuro): Confirm / Advance / ConfirmContinue / Punct / cancellazioni.
+// Vedi docs/plans/04-engine-state-improvements.md.
 #pragma once
 
 #include "motore/types.hpp"
+#include "sohw/core.hpp"
 
+#include <istream>
 #include <string>
 #include <vector>
 
@@ -16,29 +19,46 @@ namespace motore {
 
 class Engine {
 public:
-    // Popola il documento da testo GIÀ COMPLETATO: tokenizza in parole (Text) e
-    // punteggiatura (Punct) come token distinti; l'apostrofo termina il token di
-    // sinistra e ci resta attaccato (Strategia A). Le parole sono Resolved/Loaded.
+    Engine() = default;
+
+    // --- risorse / modalità (delegano al CORE) -----------------------------
+    void loadWordlist(std::istream& in);
+    void loadBigramModel(const std::string& binPath);
+    void setMode(bool assisted);          // true = T9 (assistita), false = classica
+    bool assisted() const { return assisted_; }
+
+    // --- documento ---------------------------------------------------------
+    // Popola da testo GIÀ COMPLETATO (parole Resolved/Loaded; Strategia A apostrofi).
     void loadResolved(const std::string& utf8Text);
     void clear();
 
     int wordCount() const { return static_cast<int>(words_.size()); }
-    int selection() const { return sel_; }   // -1 se vuoto
-    int openIndex() const { return open_; }   // -1 se nessuna aperta
+    int selection() const { return sel_; }
+    int openIndex() const { return open_; }
 
-    // Primitive minime di cursore/stato (M2 completerà navigazione ed editing con
-    // auto-conferma, integrazione CORE, ecc.).
-    void select(int index);   // sposta la selezione (clamp ai limiti)
-    void openSelected();      // apre la parola selezionata (state=Open)
-    void closeOpen();         // chiude l'eventuale parola aperta (state=Resolved)
+    // --- azioni ------------------------------------------------------------
+    void select(int index);   // sposta la selezione (clamp); primitiva usata dalla navigazione
+    void navigatePrev();   // auto-conferma l'aperta (senza creare) e sposta la selezione
+    void navigateNext();
+    void openSelected();   // apre la selezionata; se Typed con celle, ricalcola i candidati
+    void closeOpen();      // chiude l'eventuale parola aperta (Resolved)
+    void roll();           // cicla i candidati della parola aperta
+    // Digita un simbolo: se nessuna parola è aperta ne apre una nuova; ignora se la
+    // parola aperta è Loaded (D11-ii). Ricalcola i candidati via CORE.
+    void typeKey(const std::string& sym);
 
-    // Modello di render per l'overlay: testo intero + span evidenziati.
+    // --- render ------------------------------------------------------------
     RenderModel render() const;
 
-    // Accesso in sola lettura (test/diagnostica).
     const std::vector<Word>& words() const { return words_; }
 
 private:
+    void recomputeOpen();                 // interroga il CORE e aggiorna cands/idx/text della parola aperta
+
+    sohw::Core        core_;
+    bool              assisted_ = true;
+    int               maxCands_ = 8;
+
     std::vector<Word> words_;
     int sel_  = -1;
     int open_ = -1;

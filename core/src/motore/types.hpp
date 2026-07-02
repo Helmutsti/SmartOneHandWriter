@@ -20,7 +20,9 @@ enum class Highlight { None, Selected, Open };
 // Una parola (o token di punteggiatura) del documento.
 struct Word {
     std::string              text;    // forma mostrata (UTF-8)
-    std::vector<std::string> cells;   // tasti/gruppi T9 (solo Typed; vuoto per Loaded)
+    std::vector<std::string> cells;   // simboli/tasti digitati (solo Typed; vuoto per Loaded)
+    std::vector<std::string> cands;   // candidati per il Roll (parola Open)
+    int                      idx = 0; // candidato selezionato (indice in cands)
     WordState  state  = WordState::Resolved;
     WordOrigin origin = WordOrigin::Typed;
     WordClass  cls    = WordClass::Text;
