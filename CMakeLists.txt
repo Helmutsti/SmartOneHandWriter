@@ -12,26 +12,10 @@ if(MSVC)
 endif()
 
 # Il motore portabile: compila ovunque (Windows, macOS, Linux).
+# Contiene CORE (sohw) + MOTORE (motore) + libreria di base (onehand_core).
 add_subdirectory(core)
 
-# Tool offline (preprocessing bigrammi). Attivo di default; nessuna GUI.
-option(SOHW_BUILD_TOOLS "Build offline tools (build_bigrams)" ON)
-if(SOHW_BUILD_TOOLS)
-    add_subdirectory(tools/build_bigrams)
-endif()
-
-# Il frontend nativo: per ora solo Windows.
+# Il frontend nativo: l'assistente di digitazione (FE sopra il MOTORE). Solo Windows.
 if(WIN32)
-    add_subdirectory(platform/windows)
-    add_subdirectory(gui/win32)     # banco di prova Win32 del CORE
-    add_subdirectory(app/windows)   # assistente di digitazione (FE sopra il MOTORE)
-endif()
-
-# Banco di prova da terminale del CORE (sempre disponibile, zero dipendenze).
-add_subdirectory(cli)
-
-# Banco di prova Qt del CORE "nuova concezione" (opt-in, si salta senza Qt6).
-option(SOHW_BUILD_GUI "Build the Qt test GUI for the CORE" ON)
-if(SOHW_BUILD_GUI)
-    add_subdirectory(gui/qt)
+    add_subdirectory(app/windows)
 endif()

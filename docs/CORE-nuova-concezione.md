@@ -7,6 +7,15 @@
 > Branch: `nuova-concezione`. Stato: **CORE completo (M1–M7), committato** (`45cd8e3`), 6/6 test verdi,
 > GUI Win32 funzionante. §§1–19 = progettazione e razionale; **§20 = funzionamento e stato reale**;
 > **§21 = come riprendere + prossimi passi** (leggi prima queste due se stai ricominciando).
+>
+> ⚠️ **Repo ripulito**: le cartelle di supporto sono state **rimosse** dal working tree per tenere solo
+> `core/`, `app/windows/`, `data/`, `docs/`. Restano nella **storia git** (recuperabili con
+> `git checkout <commit precedente> -- <cartella>`). Molti riferimenti qui sotto sono quindi **storici**:
+> - banchi di prova del CORE: `cli/` (sohw_cli), `gui/win32/` (sohw_gui_win32), `gui/qt/` (sohw_gui) — rimossi;
+> - tool offline `tools/build_bigrams/` (genera `data/it.bigrams.bin`) — rimosso (recuperalo da git per rigenerare);
+> - frontend legacy `platform/windows/`, `platform/macos/` — rimossi.
+>
+> Il prodotto attuale si prova lanciando l'**assistente** `sohw_assistant` (vedi `docs/ARCHITETTURA.md` §5 e §7).
 
 ---
 
@@ -29,8 +38,8 @@
   cmake --build C:\shwb --config Release
   ```
 - **Test** (6/6): `ctest --test-dir C:\shwb\core -C Debug` (prima builda i target di test in Debug).
-- **Provalo** — GUI: `C:\shwb\gui\win32\Release\sohw_gui_win32.exe` · CLI:
-  `echo "per | | 52" | C:\shwb\cli\Release\sohw_cli.exe data\wordlist_it.txt data\it.bigrams.bin`
+- **Provalo** — lancia l'assistente: `C:\shwb\app\windows\Release\sohw_assistant.exe` (i banchi di prova
+  `cli`/`gui` che erano qui sono stati rimossi dal repo; vedi l'avviso in testa).
 - **Dato bigrammi**: il binario `data/it.bigrams.bin` è **gitignorato** (rigenerabile, ~20 MB). Se manca,
   rigeneralo (vedi §20 "Rigenerare il modello"): il CORE funziona lo stesso senza (ranking per sola
   frequenza, niente next-word).
