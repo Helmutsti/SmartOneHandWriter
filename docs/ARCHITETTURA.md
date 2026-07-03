@@ -121,5 +121,30 @@ Consolidato dai piani (ora completati e rimossi; storia in git). Per priorità:
 
 **Portabilità / packaging**
 - Verifica build su Linux/macOS (il CORE è portabile).
-- Distribuzione dell'assistente: oggi i dati sono trovati via `SOHW_DATA_DIR` assoluto (build-tree);
-  per un pacchetto standalone i dati (`wordlist_it.txt`, `it.bigrams.bin`) vanno accanto all'eseguibile.
+- ✅ Distribuzione standalone dell'assistente Windows: fatta (vedi §7). Runtime statico + dati
+  risolti accanto all'exe; nessun redistributable né `SOHW_DATA_DIR` sul PC di destinazione.
+
+## 7. Deploy (assistente Windows)
+
+**Cosa distribuire** (pacchetto ricollocabile, ~20 MB):
+```
+sohw_assistant.exe        ← runtime C++ statico: nessuna DLL/redistributable da installare
+data\
+  wordlist_it.txt         (dizionario)
+  it.bigrams.bin          (modello bigrammi; se assente → ranking a sola frequenza, niente next-word)
+```
+- La cartella `data\` va **accanto all'exe**. `main.cpp::dataPath()` risolve i file relativamente alla
+  cartella dell'eseguibile (`GetModuleFileNameW`), non alla working directory; se lì non trova i dati
+  ripiega sul path `SOHW_DATA_DIR` compilato (utile solo in build-tree di sviluppo).
+- `config.json` **non** va incluso: l'assistente non lo legge (keymap e config sono in `main.cpp`).
+- Target **Windows x64**. Dipendenze residue: solo `USER32/GDI32/KERNEL32` (DLL di sistema).
+
+**Come produrre la build di distribuzione** (separata dalla build di sviluppo, con runtime statico):
+```
+cmake -S <repo> -B C:\shwb-dist -DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded ^
+      -DSOHW_BUILD_TOOLS=OFF -DSOHW_BUILD_GUI=OFF
+cmake --build C:\shwb-dist --config Release --target sohw_assistant
+```
+Poi assembla il pacchetto: copia `C:\shwb-dist\app\windows\Release\sohw_assistant.exe` e la cartella
+`data\` (`wordlist_it.txt`, `it.bigrams.bin`) in una cartella pulita, zippala e spediscila.
+Verifica: `dumpbin -dependents sohw_assistant.exe` deve elencare solo le 3 DLL di sistema.

@@ -522,7 +522,26 @@ static LRESULT CALLBACK PanelProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 }
 
 // ------------------------------------------------------------------ dati
+// Cartella dell'eseguibile (ANSI, per coerenza con std::ifstream narrow di MSVC).
+static std::string exeDir() {
+    wchar_t buf[MAX_PATH];
+    DWORD n = GetModuleFileNameW(nullptr, buf, MAX_PATH);
+    std::wstring p(buf, n);
+    size_t slash = p.find_last_of(L"\\/");
+    std::wstring dir = (slash == std::wstring::npos) ? L"." : p.substr(0, slash);
+    int len = WideCharToMultiByte(CP_ACP, 0, dir.c_str(), (int)dir.size(),
+                                  nullptr, 0, nullptr, nullptr);
+    std::string out(len, '\0');
+    WideCharToMultiByte(CP_ACP, 0, dir.c_str(), (int)dir.size(),
+                        out.data(), len, nullptr, nullptr);
+    return out;
+}
+
 static std::string dataPath(const char* name) {
+    // 1) Pacchetto ricollocabile: <cartella-exe>/data/<name>.
+    std::string p = exeDir() + "\\data\\" + name;
+    { std::ifstream f(p, std::ios::binary); if (f.good()) return p; }
+    // 2) Fallback build-tree per lo sviluppo (path assoluto compilato).
 #ifdef SOHW_DATA_DIR
     return std::string(SOHW_DATA_DIR) + "/" + name;
 #else
