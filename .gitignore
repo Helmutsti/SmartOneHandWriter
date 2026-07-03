@@ -3,6 +3,9 @@
 /build*/
 /cmake-build*/
 
+# Cartella di release assemblata (exe + data/), rigenerabile. Vedi docs/ARCHITETTURA.md §7.
+/dist/
+
 # Artefatti di compilazione
 *.o
 *.obj
