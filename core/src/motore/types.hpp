@@ -38,6 +38,25 @@ struct RenderSpan {
                                   // il FE ci sottolinea il prefisso: il resto è completamento)
 };
 
+// Quali azioni-comando hanno senso nello stato corrente del documento. Il FE le
+// usa per attivare/disattivare i bottoni del pannello ("attiva i bottoni durante
+// la digitazione"): un'azione a false sarebbe un no-op se invocata. La logica di
+// disponibilità vive qui nel MOTORE (condivisa fra i frontend), non nel FE.
+struct Availability {
+    bool navPrev      = false;   // ◀ Naviga: c'è una parola a sinistra
+    bool navNext      = false;   // Naviga ▶: c'è una parola a destra
+    bool open         = false;   // Apri/Edit: c'è una selezione non già aperta
+    bool roll         = false;   // Roll: ≥2 candidati (parola aperta) o ≥2 next-word
+    bool confirm      = false;   // Conferma: c'è una parola aperta o un next-word evidenziato
+    bool advance      = true;    // Avanti / Conf. continua: "nuova parola" sempre possibile
+    bool deleteLetter = false;   // Canc. lettera: c'è una parola aperta
+    bool deleteWord   = false;   // Canc. parola: c'è una parola selezionata
+    bool punct        = true;    // . , ? ! : sempre inseribile
+    bool read         = true;    // Read (clipboard): sempre
+    bool write        = false;   // Write: il documento non è vuoto
+    bool discard      = false;   // Scarta: il documento non è vuoto
+};
+
 // Modello di render completo per l'overlay: testo intero + span con evidenziazioni
 // + indici di selezione/aperta.
 struct RenderModel {
@@ -52,6 +71,9 @@ struct RenderModel {
     std::vector<std::string> suggestions;
     int  suggestionSel     = -1;      // voce evidenziata nella riga (-1 = nessuna)
     bool suggestionsAreNext = false;  // true = next-word; false = candidati della parola aperta
+
+    // Azioni valide adesso: il FE ci attiva/disattiva i bottoni corrispondenti.
+    Availability actions;
 };
 
 } // namespace motore

@@ -93,6 +93,18 @@ I tre livelli sono implementati e la prima **versione avviabile** dell'assistent
   e auto-hide a buffer vuoto, hook tastiera
   `WH_KEYBOARD_LL` (keymap stile cellulare `weasdzxc` = tasti 2–9, Spazio = 0; + funzioni;
   Esc = Scarta), Read/Write via clipboard (+`Ctrl+V`).
+- **Mappatura tasto→funzione esternalizzata**: il FE non ha più il binding cablato nello `switch`;
+  legge all'avvio `data\tasti.conf` (`loadBindings`, con fallback `defaultBindings` se il file manca),
+  costruisce `g_keyToAct` (VK→azione) e in `handleKeyDown` traduce il tasto premuto nel comando da
+  inviare al MOTORE. Formato `funzione = tasto [tasto...]` con commenti `#`; più tasti sulla stessa
+  funzione; i tasti-lettera fanno da funzione solo in Assistita/Multi-tap (in Classica si digitano).
+  I tasti-gruppo T9 (`weasdzxc`) restano gestiti a parte (input lettere), non nel file.
+- **Attivazione bottoni per stato**: il MOTORE espone in `RenderModel.actions` (`motore::Availability`)
+  quali comandi hanno senso nello stato corrente (calcolo in `Engine::availability`, riusa i
+  suggerimenti del render). Il FE, a ogni `refreshOverlay`, chiama `updateButtonStates` →
+  `EnableWindow` sui bottoni: quelli non applicabili diventano grigi mentre si scrive (es. Roll solo
+  con ≥2 candidati/next-word, Naviga ▶ solo se non sei all'ultima parola, Canc. lettera solo con
+  parola aperta). Logica condivisa nel MOTORE, non nel FE. Coperto da `motore_tests`.
 
 **Cablatura scelta**: il FE C++ chiama `motore_core` **direttamente** (niente C ABI dedicata del MOTORE);
 la C ABI del CORE (`smartcore_c`) resta per i linguaggi terzi. Build: `cmake -B build && cmake --build
@@ -104,6 +116,9 @@ Consolidato dai piani (ora completati e rimossi; storia in git). Per priorità:
 
 **FE / MOTORE**
 - Editor UI di rimappatura tasti (fisico ↔ gruppo/funzione) + preset **tastierino numerico** (F16).
+  Base già pronta: la mappa tasto→funzione è nel file `data\tasti.conf` (vedi §5); un editor UI
+  scriverebbe quel file. Manca ancora la rimappatura dei **tasti-gruppo T9** (`weasdzxc`), oggi cablati
+  in `buildKeymap()`.
 - Attivazione delle funzioni **solo da tastiera** (obiettivo uso a una mano); doppio-tap per funzioni
   extra; **hotkey globale** per Play/Pause (F17/F18). Oggi Play/Pause e le funzioni sono anche su bottoni.
 - **Overlay near-caret** e `Read`/selezione via **UIA** (posizione reale del cursore dell'app), invece
@@ -132,10 +147,14 @@ sohw_assistant.exe        ← runtime C++ statico: nessuna DLL/redistributable d
 data\
   wordlist_it.txt         (dizionario)
   it.bigrams.bin          (modello bigrammi; se assente → ranking a sola frequenza, niente next-word)
+  tasti.conf              (mappatura tasto→funzione del FE; opzionale: se assente valgono i default)
 ```
 - La cartella `data\` va **accanto all'exe**. `main.cpp::dataPath()` risolve i file relativamente alla
   cartella dell'eseguibile (`GetModuleFileNameW`), non alla working directory; se lì non trova i dati
   ripiega sul path `SOHW_DATA_DIR` compilato (utile solo in build-tree di sviluppo).
+- `tasti.conf` è **opzionale**: l'assistente lo legge all'avvio per mappare i tasti alle funzioni; se
+  manca (o è illeggibile) usa i default di fabbrica cablati (`defaultBindings()`), identici al file
+  distribuito. Includerlo permette all'utente di rimappare i tasti senza ricompilare.
 - `config.json` **non** va incluso: l'assistente non lo legge (keymap e config sono in `main.cpp`).
 - Target **Windows x64**. Dipendenze residue: solo `USER32/GDI32/KERNEL32` (DLL di sistema).
 

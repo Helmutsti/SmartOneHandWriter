@@ -8,9 +8,11 @@
 //    parola selezionata/aperta evidenziate; sparisce a buffer vuoto. Sta FERMO e si
 //    può TRASCINARE col mouse (non insegue più il cursore).
 //  - Hook tastiera globale (WH_KEYBOARD_LL): in assistita w e a s d z x c = gruppi
-//    T9 come su un cellulare (w=2 e=3 a=4 s=5 d=6 z=7 x=8 c=9); Spazio=0=Conferma
-//    continua; F=Roll G=Conferma R=Avanti T=Apri V/B=Naviga;
-//    Tab/Backspace/BlocMaiusc=cancella; Esc=Scarta; 1..4=. , ? !; 5=Write; `=Read.
+//    T9 come su un cellulare (w=2 e=3 a=4 s=5 d=6 z=7 x=8 c=9). Le FUNZIONI (Roll,
+//    Conferma, Avanti, Apri, Naviga, cancella, punteggiatura, Read/Write, Scarta,
+//    Conferma continua) sono mappate ai tasti dal file di conf  data\tasti.conf
+//    (letto all'avvio; default di fabbrica se assente). Il FE traduce il tasto nel
+//    comando e lo invia al MOTORE. Vedi loadBindings()/defaultBindings().
 //  - Tre modalità (bottone Modalità): Assistita (T9), Classica (lettere dirette),
 //    Multi-tap (scorrimento lettere: ripremi lo stesso tasto per ciclare le lettere
 //    del gruppo, es. w,w,w = 'c'; per parole fuori dizionario). Multi-tap è Literal
@@ -24,7 +26,9 @@
 #include "motore/engine.hpp"
 #include "onehand/types.hpp"   // onehand::Config / KeyMap
 
+#include <cctype>
 #include <fstream>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -51,6 +55,7 @@ static HHOOK          g_hook   = nullptr;
 static HWND           g_panel  = nullptr;
 static HWND           g_overlay = nullptr;
 static HWND           g_status = nullptr; // etichetta stato nel pannello
+static std::map<int, HWND> g_btn;         // bottoni del pannello per id (per abilitarli/disabilitarli)
 static HFONT          g_font   = nullptr;
 static HFONT          g_overlayFont = nullptr;
 
@@ -99,7 +104,13 @@ enum Act {
     A_READ, A_WRITE, A_DISCARD
 };
 
+// Mappa TASTO-fisico (VK) -> funzione, caricata dal file di conf (data/tasti.conf)
+// con fallback ai default. È qui che il FE traduce un tasto nel comando da inviare
+// al MOTORE. Popolata da loadBindings()/defaultBindings().
+static std::map<DWORD, Act> g_keyToAct;
+
 static void refreshOverlay();
+static void updateButtonStates(const motore::Availability& a);
 
 // legge/scrive la clipboard (CF_UNICODETEXT)
 static std::wstring clipboardGet() {
@@ -186,6 +197,10 @@ static void refreshOverlay() {
     for (const auto& w : r.suggestions) g_sugg.push_back(u8ToW(w));
     g_sugSel  = r.suggestionSel;
     g_sugNext = r.suggestionsAreNext;
+
+    // Attiva/disattiva i bottoni anche a documento vuoto (quasi tutti grigi finché
+    // non si inizia a scrivere), perciò prima dell'eventuale nascondere l'overlay.
+    updateButtonStates(r.actions);
 
     if (g_engine.empty()) { ShowWindow(g_overlay, SW_HIDE); return; }
 
@@ -334,12 +349,112 @@ static bool isGroupKey(DWORD vk) {
                   case 'Z': case 'X': case 'C': return true; default: return false; }
 }
 
+// ------------------------------------------------------------------ mappatura tasti (file di conf)
+// Nome-funzione usato nel file di conf -> azione interna. A_NONE = nome sconosciuto.
+static Act funcNameToAct(const std::string& name) {
+    struct M { const char* n; Act a; };
+    static const M tbl[] = {
+        { "conferma_continua", A_CONTINUE }, { "cancella_parola", A_DEL_WORD },
+        { "cancella_lettera",  A_DEL_LETTER }, { "scarta", A_DISCARD },
+        { "punto", A_DOT }, { "virgola", A_COMMA }, { "domanda", A_QUES }, { "esclamativo", A_EXCL },
+        { "write", A_WRITE }, { "read", A_READ },
+        { "roll", A_ROLL }, { "conferma", A_CONFIRM }, { "avanti", A_ADVANCE },
+        { "apri", A_OPEN }, { "naviga_prev", A_NAV_PREV }, { "naviga_next", A_NAV_NEXT },
+    };
+    for (const auto& m : tbl) if (name == m.n) return m.a;
+    return A_NONE;
+}
+
+// Nome-tasto del file di conf -> Virtual-Key. 0 = nome sconosciuto. Case-insensitive.
+static DWORD keyNameToVk(const std::string& raw) {
+    std::string s;
+    for (char c : raw) s.push_back((char)std::tolower((unsigned char)c));
+    if (s.size() == 1) {
+        char c = s[0];
+        if (c >= 'a' && c <= 'z') return (DWORD)('A' + (c - 'a'));
+        if (c >= '0' && c <= '9') return (DWORD)c;
+        if (c == '`')             return VK_OEM_3;
+    }
+    if (s == "spazio" || s == "space")                       return VK_SPACE;
+    if (s == "tab")                                          return VK_TAB;
+    if (s == "backspace" || s == "back")                     return VK_BACK;
+    if (s == "blocmaiusc" || s == "capslock" || s == "caps") return VK_CAPITAL;
+    if (s == "esc" || s == "escape")                         return VK_ESCAPE;
+    if (s == "backtick" || s == "grave" || s == "apice")     return VK_OEM_3;
+    return 0;
+}
+
+// Binding di fabbrica (usati se il file di conf manca o è illeggibile): identici al
+// vecchio cablaggio, così il deploy self-contained funziona anche senza il file.
+static void defaultBindings() {
+    g_keyToAct.clear();
+    g_keyToAct[VK_SPACE]   = A_CONTINUE;
+    g_keyToAct[VK_TAB]     = A_DEL_WORD;
+    g_keyToAct[VK_BACK]    = A_DEL_LETTER;
+    g_keyToAct[VK_CAPITAL] = A_DEL_LETTER;
+    g_keyToAct[VK_ESCAPE]  = A_DISCARD;
+    g_keyToAct['1'] = A_DOT;   g_keyToAct['2'] = A_COMMA;
+    g_keyToAct['3'] = A_QUES;  g_keyToAct['4'] = A_EXCL;
+    g_keyToAct['5'] = A_WRITE; g_keyToAct[VK_OEM_3] = A_READ;
+    g_keyToAct['F'] = A_ROLL;    g_keyToAct['G'] = A_CONFIRM;
+    g_keyToAct['R'] = A_ADVANCE; g_keyToAct['T'] = A_OPEN;
+    g_keyToAct['V'] = A_NAV_PREV; g_keyToAct['B'] = A_NAV_NEXT;
+}
+
+// Carica i binding dal file di conf. Formato per riga: "funzione = tasto [tasto...]".
+// '#' avvia un commento. Più tasti (separati da spazio/virgola) mappano la stessa
+// funzione. La mappa è ricostruita interamente dal file (nessun merge coi default):
+// così rimappare una funzione ne SPOSTA il tasto invece di aggiungerne uno.
+// Ritorna false (→ usa i default) se il file manca o non contiene binding validi.
+static bool loadBindings(const std::string& path) {
+    std::ifstream f(path, std::ios::binary);
+    if (!f) return false;
+    auto trim = [](std::string& s) {
+        size_t a = s.find_first_not_of(" \t\r\n");
+        if (a == std::string::npos) { s.clear(); return; }
+        size_t b = s.find_last_not_of(" \t\r\n");
+        s = s.substr(a, b - a + 1);
+    };
+    std::map<DWORD, Act> parsed;
+    std::string line;
+    while (std::getline(f, line)) {
+        size_t h = line.find('#');
+        if (h != std::string::npos) line.erase(h);        // togli il commento
+        size_t eq = line.find('=');
+        if (eq == std::string::npos) continue;
+        std::string fname = line.substr(0, eq);
+        std::string keys  = line.substr(eq + 1);
+        trim(fname);
+        for (char& c : fname) c = (char)std::tolower((unsigned char)c);
+        Act a = funcNameToAct(fname);
+        if (a == A_NONE) continue;
+        std::string tok;
+        auto flush = [&]() {
+            if (tok.empty()) return;
+            DWORD vk = keyNameToVk(tok);
+            if (vk) parsed[vk] = a;
+            tok.clear();
+        };
+        for (char c : keys) {
+            if (c == ' ' || c == '\t' || c == ',' || c == '\r' || c == '\n') flush();
+            else tok.push_back(c);
+        }
+        flush();
+    }
+    if (parsed.empty()) return false;
+    g_keyToAct.swap(parsed);
+    return true;
+}
+
 static bool isMapped(DWORD vk) {
-    if (vk == VK_SPACE || vk == VK_TAB || vk == VK_BACK || vk == VK_CAPITAL) return true;
-    if (vk == VK_ESCAPE) return true;                // Scarta
-    if (vk == VK_OEM_3) return true;                 // `
-    if (vk >= '1' && vk <= '5') return true;
-    if (vk >= 'A' && vk <= 'Z') return true;
+    // In Classica ogni lettera si digita; le funzioni su tasti non-lettera restano attive.
+    if (g_mode == MODE_CLASSIC) {
+        if (vk >= 'A' && vk <= 'Z') return true;
+        return g_keyToAct.count(vk) > 0;
+    }
+    // T9 / Multi-tap: funzioni mappate + tasti-gruppo.
+    if (g_keyToAct.count(vk)) return true;
+    if (isGroupKey(vk)) return true;
     return false;
 }
 
@@ -368,41 +483,26 @@ static void multiTapKey(DWORD vk) {
 }
 
 static bool handleKeyDown(DWORD vk) {
-    // comuni a tutte le modalità
-    switch (vk) {
-        case VK_SPACE:   performAction(A_CONTINUE); return true;
-        case VK_TAB:     performAction(A_DEL_WORD); return true;
-        case VK_BACK:    performAction(A_DEL_LETTER); return true;
-        case VK_CAPITAL: performAction(A_DEL_LETTER); return true;
-        case '1':        performAction(A_DOT);   return true;
-        case '2':        performAction(A_COMMA); return true;
-        case '3':        performAction(A_QUES);  return true;
-        case '4':        performAction(A_EXCL);  return true;
-        case '5':        performAction(A_WRITE); return true;
-        case VK_OEM_3:   performAction(A_READ);  return true;
-        case VK_ESCAPE:  performAction(A_DISCARD); return true;
-        default: break;
+    const bool letterKey = (vk >= 'A' && vk <= 'Z');
+
+    // 1) Funzione mappata al tasto (dal file di conf) -> invia il comando al MOTORE.
+    //    In Classica i tasti-LETTERA servono a digitare, quindi lì una funzione
+    //    assegnata a una lettera è inattiva (la lettera si scrive).
+    auto it = g_keyToAct.find(vk);
+    if (it != g_keyToAct.end() && !(letterKey && g_mode == MODE_CLASSIC)) {
+        performAction(it->second);
+        return true;
     }
 
-    // Classica: ogni lettera è letterale.
+    // 2) Digitazione di lettere / gruppi.
     if (g_mode == MODE_CLASSIC) {
-        if (vk >= 'A' && vk <= 'Z') {
+        if (letterKey) {
             std::string sym; groupSymbol(vk, sym);
             g_engine.typeKey(sym); refreshOverlay(); return true;
         }
         return false;
     }
-
-    // T9 e Multi-tap: le lettere non-gruppo fanno da tasti funzione.
-    switch (vk) {
-        case 'F': performAction(A_ROLL);     return true;
-        case 'G': performAction(A_CONFIRM);  return true;
-        case 'R': performAction(A_ADVANCE);  return true;
-        case 'T': performAction(A_OPEN);     return true;
-        case 'V': performAction(A_NAV_PREV); return true;
-        case 'B': performAction(A_NAV_NEXT); return true;
-        default: break;
-    }
+    // T9 e Multi-tap: i tasti-gruppo alimentano il dizionario / lo scorrimento lettere.
     if (isGroupKey(vk)) {
         if (g_mode == MODE_MULTITAP) {
             multiTapKey(vk);                 // scorrimento lettere del gruppo
@@ -412,7 +512,7 @@ static bool handleKeyDown(DWORD vk) {
         }
         return true;
     }
-    return false;   // altre lettere non usate: lasciale passare
+    return false;   // altri tasti non usati: lasciali passare all'app
 }
 
 // ------------------------------------------------------------------ pannello
@@ -441,14 +541,65 @@ static void togglePlay() {
 }
 
 static HWND mkButton(HWND parent, const wchar_t* text, int id, int x, int y, int w, int h) {
-    HWND b = CreateWindowW(L"BUTTON", text, WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+    HWND b = CreateWindowW(L"BUTTON", text, WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | BS_MULTILINE,
                            x, y, w, h, parent, (HMENU)(INT_PTR)id, nullptr, nullptr);
     if (g_font) SendMessageW(b, WM_SETFONT, (WPARAM)g_font, TRUE);
+    g_btn[id] = b;
     return b;
 }
 
+// Attiva/disattiva i bottoni del pannello secondo le azioni valide adesso (calcolate
+// dal MOTORE). "Attivare i bottoni durante la digitazione": man mano che il testo
+// cambia, i comandi senza senso diventano grigi. Play/Modalità restano sempre attivi.
+static void updateButtonStates(const motore::Availability& a) {
+    auto en = [](int id, bool on) {
+        auto it = g_btn.find(id);
+        if (it != g_btn.end() && it->second) EnableWindow(it->second, on ? TRUE : FALSE);
+    };
+    en(IDB_PREV,     a.navPrev);
+    en(IDB_NEXT,     a.navNext);
+    en(IDB_OPEN,     a.open);
+    en(IDB_ROLL,     a.roll);
+    en(IDB_CONFIRM,  a.confirm);
+    en(IDB_ADVANCE,  a.advance);
+    en(IDB_CONTINUE, a.advance);   // Conf. continua = Avanti nel MOTORE
+    en(IDB_DELL,     a.deleteLetter);
+    en(IDB_DELW,     a.deleteWord);
+    en(IDB_DOT,      a.punct);
+    en(IDB_COMMA,    a.punct);
+    en(IDB_QUES,     a.punct);
+    en(IDB_EXCL,     a.punct);
+    en(IDB_READ,     a.read);
+    en(IDB_WRITE,    a.write);
+    en(IDB_DISCARD,  a.discard);
+}
+
+// Nome breve del tasto da mostrare sul bottone (VK -> testo).
+static std::wstring vkDisplay(DWORD vk) {
+    if (vk == VK_SPACE)   return L"Spazio";
+    if (vk == VK_TAB)     return L"Tab";
+    if (vk == VK_BACK)    return L"Backspace";
+    if (vk == VK_CAPITAL) return L"BlocMaiusc";
+    if (vk == VK_ESCAPE)  return L"Esc";
+    if (vk == VK_OEM_3)   return L"`";
+    if ((vk >= 'A' && vk <= 'Z') || (vk >= '0' && vk <= '9')) return std::wstring(1, (wchar_t)vk);
+    return L"";
+}
+// Primo tasto (per ordine di VK) mappato a un'azione; L"" se nessuno.
+static std::wstring keyForAct(Act a) {
+    for (const auto& kv : g_keyToAct)
+        if (kv.second == a) return vkDisplay(kv.first);
+    return L"";
+}
+// Etichetta del bottone: testo + "(tasto)" su una seconda riga (BS_MULTILINE).
+// Se l'azione non ha un tasto mappato, resta solo il testo.
+static std::wstring withKey(const std::wstring& base, Act a) {
+    const std::wstring k = keyForAct(a);
+    return k.empty() ? base : (base + L"\n(" + k + L")");
+}
+
 static void createPanel(HWND hwnd) {
-    const int W = 96, H = 30, PAD = 6;
+    const int W = 96, H = 42, PAD = 6;
     int x = PAD, y = PAD;
     auto row = [&](int col) { return PAD + col * (W + PAD); };
     mkButton(hwnd, L"Play/Pause", IDB_PLAY, row(0), y, W, H);
@@ -458,26 +609,26 @@ static void createPanel(HWND hwnd) {
     if (g_font) SendMessageW(g_status, WM_SETFONT, (WPARAM)g_font, TRUE);
 
     y += H + PAD;
-    mkButton(hwnd, L"◀ Naviga",   IDB_PREV,     row(0), y, W, H);
-    mkButton(hwnd, L"Naviga ▶",   IDB_NEXT,     row(1), y, W, H);
-    mkButton(hwnd, L"Apri/Edit",  IDB_OPEN,     row(2), y, W, H);
-    mkButton(hwnd, L"Roll",       IDB_ROLL,     row(3), y, W, H);
-    mkButton(hwnd, L"Conferma",   IDB_CONFIRM,  row(4), y, W, H);
+    mkButton(hwnd, withKey(L"◀ Naviga",  A_NAV_PREV).c_str(), IDB_PREV,    row(0), y, W, H);
+    mkButton(hwnd, withKey(L"Naviga ▶",  A_NAV_NEXT).c_str(), IDB_NEXT,    row(1), y, W, H);
+    mkButton(hwnd, withKey(L"Apri/Edit", A_OPEN).c_str(),     IDB_OPEN,    row(2), y, W, H);
+    mkButton(hwnd, withKey(L"Roll",      A_ROLL).c_str(),     IDB_ROLL,    row(3), y, W, H);
+    mkButton(hwnd, withKey(L"Conferma",  A_CONFIRM).c_str(),  IDB_CONFIRM, row(4), y, W, H);
 
     y += H + PAD;
-    mkButton(hwnd, L"Avanti",       IDB_ADVANCE,  row(0), y, W, H);
-    mkButton(hwnd, L"Conf. continua",IDB_CONTINUE,row(1), y, W, H);
-    mkButton(hwnd, L"Canc. lettera",IDB_DELL,     row(2), y, W, H);
-    mkButton(hwnd, L"Canc. parola", IDB_DELW,     row(3), y, W, H);
+    mkButton(hwnd, withKey(L"Avanti",         A_ADVANCE).c_str(),   IDB_ADVANCE, row(0), y, W, H);
+    mkButton(hwnd, withKey(L"Conf. continua", A_CONTINUE).c_str(),  IDB_CONTINUE,row(1), y, W, H);
+    mkButton(hwnd, withKey(L"Canc. lettera",  A_DEL_LETTER).c_str(),IDB_DELL,    row(2), y, W, H);
+    mkButton(hwnd, withKey(L"Canc. parola",   A_DEL_WORD).c_str(),  IDB_DELW,    row(3), y, W, H);
 
     y += H + PAD;
-    mkButton(hwnd, L".",  IDB_DOT,   row(0), y, W / 2, H);
-    mkButton(hwnd, L",",  IDB_COMMA, row(0) + W / 2, y, W / 2, H);
-    mkButton(hwnd, L"?",  IDB_QUES,  row(1), y, W / 2, H);
-    mkButton(hwnd, L"!",  IDB_EXCL,  row(1) + W / 2, y, W / 2, H);
-    mkButton(hwnd, L"Read",  IDB_READ,  row(2), y, W, H);
-    mkButton(hwnd, L"Write", IDB_WRITE, row(3), y, W, H);
-    mkButton(hwnd, L"Scarta (Esc)", IDB_DISCARD, row(4), y, W, H);
+    mkButton(hwnd, withKey(L".", A_DOT).c_str(),   IDB_DOT,   row(0), y, W / 2, H);
+    mkButton(hwnd, withKey(L",", A_COMMA).c_str(), IDB_COMMA, row(0) + W / 2, y, W / 2, H);
+    mkButton(hwnd, withKey(L"?", A_QUES).c_str(),  IDB_QUES,  row(1), y, W / 2, H);
+    mkButton(hwnd, withKey(L"!", A_EXCL).c_str(),  IDB_EXCL,  row(1) + W / 2, y, W / 2, H);
+    mkButton(hwnd, withKey(L"Read",  A_READ).c_str(),  IDB_READ,  row(2), y, W, H);
+    mkButton(hwnd, withKey(L"Write", A_WRITE).c_str(), IDB_WRITE, row(3), y, W, H);
+    mkButton(hwnd, withKey(L"Scarta", A_DISCARD).c_str(), IDB_DISCARD, row(4), y, W, H);
 
     setStatus();
 }
@@ -571,6 +722,9 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int show) {
     g_engine.loadBigramModel(dataPath("it.bigrams.bin"));
     g_engine.setMode(true);                     // assistita
 
+    // --- mappatura tasti -> funzioni (dal file di conf; default se assente) ---
+    if (!loadBindings(dataPath("tasti.conf"))) defaultBindings();
+
     // --- font ---
     g_font = CreateFontW(-14, 0, 0, 0, FW_NORMAL, 0, 0, 0, DEFAULT_CHARSET,
                          OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY,
@@ -605,7 +759,7 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int show) {
     pc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
     pc.lpszClassName = L"SohwPanel";
     RegisterClassExW(&pc);
-    RECT r = { 0, 0, 530, 176 };
+    RECT r = { 0, 0, 530, 216 };   // più alto: bottoni a due righe (testo + tasto)
     AdjustWindowRect(&r, WS_OVERLAPPEDWINDOW & ~WS_THICKFRAME & ~WS_MAXIMIZEBOX, FALSE);
     g_panel = CreateWindowExW(0, pc.lpszClassName,
                               L"SmartOneHandWriter — Assistente",

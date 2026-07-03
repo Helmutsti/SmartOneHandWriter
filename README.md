@@ -1,20 +1,22 @@
-# OneHand ✍️
+# SmartOneHandWriter ✍️
 
 **Scrivi con una mano sola, come col T9 dei vecchi telefonini.**
 
-OneHand è un piccolo aiuto per il computer. Quando è attivo, scrivi **premendo un
-tasto per ogni lettera**, ma ogni tasto raggruppa più lettere (come sui vecchi
-cellulari: il `2` vale `a b c`, il `3` vale `d e f`…). Non devi azzeccare la
-lettera esatta: il programma **indovina la parola giusta** dal dizionario e la
-scrive al posto tuo (nel Blocco note, nel browser, in Word… ovunque).
+SmartOneHandWriter (l'assistente si chiama `sohw_assistant`) è un piccolo aiuto per
+il computer. Quando è attivo, scrivi **premendo un tasto per ogni lettera**, ma ogni
+tasto raggruppa più lettere (come sui vecchi cellulari: il `2` vale `a b c`, il `3`
+vale `d e f`…). Non devi azzeccare la lettera esatta: il programma **indovina la
+parola giusta** dal dizionario e la scrive al posto tuo (nel Blocco note, nel
+browser, in Word… ovunque).
 
-> **Esempio:** per scrivere **cane** premi i tasti `2 2 6 3`
-> (c→2, a→2, n→6, e→3) → compare **cane**. Se volevi un'altra parola con la
-> stessa sequenza (es. **band**), premi **Roll** per alternarle.
+> **Esempio:** per scrivere **cane** premi, una volta ciascuno, i tasti dei gruppi
+> di `c a n e`; se compare un'altra parola con la stessa sequenza (es. **band**),
+> premi **Roll** per alternarle. (Quali tasti fisici sono i «gruppi» è spiegato
+> nella [Parte 2](#le-tre-modalità).)
 
 È pensato per chi usa **una mano sola**, in modo permanente o temporaneo (l'altra
-mano occupata, un braccio ingessato, il mouse…): con il solo **tastierino
-numerico** scrivi qualsiasi parola.
+mano occupata, un braccio ingessato, il mouse…): con **otto tasti** a portata di una
+mano scrivi qualsiasi parola.
 
 ---
 
@@ -24,21 +26,14 @@ numerico** scrivi qualsiasi parola.
 - **Qualcuno me l'ha già installato e voglio solo scrivere** → **[Parte 2 · Come si usa](#parte-2--come-si-usa)**.
 
 > L'installazione è tecnica e si fa **una volta sola**. Se non te la senti, falla
-> fare a un familiare o a un tecnico: dopo, usare OneHand è semplicissimo.
+> fare a un familiare o a un tecnico: dopo, usare il programma è semplicissimo.
 
 ---
 
 # Parte 1 · Installazione
 
 Il programma non è già pronto: va **creato una volta** dal computer (si chiama
-«compilare»). Sotto trovi due strade separate — scegli **la tua**:
-
-- **[💻 Ho Windows](#-installazione-su-windows)**
-- **[🍏 Ho un Mac](#-installazione-su-mac-demo)**
-
----
-
-## 💻 Installazione su Windows
+«compilare»). Serve **Windows**.
 
 ### Cosa serve (una volta sola)
 
@@ -80,59 +75,9 @@ di comandi e (quando scrivi) un **riquadro** in sovraimpressione col testo. All'
 
 > 🔁 **Hai cambiato qualcosa e vuoi rifarlo?** Basta ripetere solo
 > `cmake --build build --config Release`.
->
-> 🧪 **Versione precedente.** Lo stesso build produce anche `build\platform\windows\
-> Release\onehand.exe`, il **prototipo T9 a tastierino numerico** (una cifra per
-> lettera). È il predecessore dell'assistente ed è descritto più in basso; la demo
-> macOS usa lo stesso schema.
 
----
-
-## 🍏 Installazione su Mac (demo)
-
-Su Mac per ora c'è una **demo**: una finestra con dentro un pannello di
-configurazione (dizionario e tasti funzione riassegnabili, Play/Stop) e un foglio
-su cui provare OneHand. Serve a **vederlo funzionare subito** e **non chiede alcun
-permesso**. (Scrivere anche nelle *altre* app del Mac sarà un passo successivo.)
-
-### Cosa serve (una volta sola)
-
-I **Command Line Tools** di Apple (non serve Xcode intero). Se non li hai,
-apri il Terminale e scrivi:
-
-```bash
-xcode-select --install
-```
-
-### I passi
-
-Dal Terminale, dentro la cartella del progetto, dai questi comandi in ordine:
-
-```bash
-# 1) prepara il motore del programma
-clang++ -std=c++17 -Icore/include -Icore/src -c \
-  core/src/engine.cpp core/src/dictionary.cpp core/src/config.cpp \
-  core/src/utf8.cpp core/src/alterations.cpp core/src/predictor_frequency.cpp \
-  core/src/onehand_c.cpp
-
-# 2) crea l'app della demo
-swiftc platform/macos/main.swift *.o \
-  -import-objc-header core/include/onehand/onehand_c.h \
-  -framework Cocoa -lc++ -o onehand_mac
-
-# 3) avvia
-./onehand_mac
-```
-
-Si apre una finestra col pannello di configurazione in alto (dizionario, tasti
-funzione, Play/Stop) e il foglio di prova sotto. Premi **▶ Play**, clicca nel
-foglio e scrivi con il tastierino: vedi le parole comparire e il riquadro delle
-alternative. Il pulsante **Pulisci** azzera il foglio.
-→ Vai alla **[Parte 2 · Come si usa](#parte-2--come-si-usa)**.
-
-> A differenza di Windows, qui si scrive **solo dentro questa finestra**: le
-> impostazioni (`config.json`, tasti funzione) sono le stesse, ma OneHand non
-> intercetta ancora la tastiera nelle altre app del Mac.
+> 📦 **Distribuire il programma su un altro PC** (senza compilatore): vedi la ricetta
+> del pacchetto self-contained in `docs/ARCHITETTURA.md` §7.
 
 ---
 
@@ -144,9 +89,12 @@ riquadro in sovraimpressione, e lo scrive nell'app attiva quando glielo chiedi.
 
 ## Le due finestre
 
-- **Pannello**: un bottone per ogni funzione, più **Play/Pause** e **Modalità**.
+- **Pannello**: un bottone per ogni funzione, più **Play/Pause** e **Modalità**. I
+  bottoni si **attivano/disattivano** da soli secondo cosa ha senso in quel momento
+  (es. *Roll* si accende solo se ci sono più parole possibili).
 - **Riquadro** (overlay): mostra il buffer mentre scrivi; la parola **selezionata**
-  è azzurra, quella **aperta** (in scrittura) è ambra. Sta **fermo** e lo puoi
+  è azzurra, quella **aperta** (in scrittura) è ambra. Sotto compare la **riga dei
+  suggerimenti** (candidati o parola successiva). Sta **fermo** e lo puoi
   **trascinare** col mouse dove preferisci; sparisce quando il buffer è vuoto.
 
 ## Accendere e spegnere
@@ -172,7 +120,8 @@ riquadro in sovraimpressione, e lo scrive nell'app attiva quando glielo chiedi.
 ## I tasti (modalità assistita)
 
 Oltre ai bottoni del pannello, con l'assistente **acceso** valgono queste scorciatoie
-(tutte a portata di una mano sinistra):
+(tutte a portata di una mano sinistra). Sono i **valori di fabbrica**: puoi
+riassegnarle nel file `data/tasti.conf` (vedi [Personalizzazione](#personalizzazione-facoltativa)).
 
 | Premi | Funzione |
 |-------|----------|
@@ -196,66 +145,19 @@ Oltre ai bottoni del pannello, con l'assistente **acceso** valgono queste scorci
 > programma; in Classica i tasti-lettera occupano `R T F G V B`, quindi quelle
 > funzioni si usano dai **bottoni**.
 
----
-
-## Versione precedente (prototipo T9 numpad · demo macOS)
-
-Le sezioni seguenti descrivono il **prototipo predecessore** (`onehand.exe` su
-Windows e la demo macOS): tastierino numerico `2`–`9`, un solo campo, senza
-Read/Write. L'assistente sopra lo sostituisce su Windows.
-
-## Accendere e spegnere
-
-- Premi **▶ Play** per accenderlo (il pulsante diventa **⏹ Stop**).
-- Clicca in un punto dove si scrive (un campo di testo) e scrivi.
-- Premi **⏹ Stop** per tornare alla tastiera normale.
-
-## L'idea in una frase
-
-Premi **una volta** il tasto di ciascuna lettera — anche se quel tasto contiene
-più lettere. Il dizionario indovina la parola. Se ce n'è più d'una con la stessa
-sequenza di tasti, il **Roll** te le fa scorrere.
-
-## I tasti da usare
-
-| Premi | Cosa succede |
-|-------|--------------|
-| **le cifre 2–9** | compongono la parola (ogni cifra = un gruppo di lettere) |
-| **Roll** *(Tab)* | scorre le altre parole possibili con la stessa sequenza |
-| **spazio** | conferma la parola e va avanti (ne apre una nuova) |
-| **Shift destro** | conferma la parola **senza** andare avanti |
-| **Backspace** | cancella l'ultima lettera |
-| **Canc** | cancella tutta la parola (e riapre quella a sinistra) |
-| **← / →** | riapre la parola **precedente / successiva** per correggerla |
-| **Invio** | conferma e va a capo |
-
-Il **tastierino numerico** funziona come le cifre in alto. Puoi anche scrivere le
-lettere **direttamente** (tasti `a`–`z`): ogni lettera vale se stessa, utile per
-nomi e parole fuori dizionario.
-
-Mentre scrivi, vicino al cursore compare un **riquadro** con le altre parole
-possibili, quando ce n'è più d'una: usa **Roll** per scegliere.
-
 ## Buono a sapersi
 
-Tre cose che rendono tutto più naturale:
+- **Gli spazi si mettono da soli.** Non esiste un tasto «spazio-lettera»: tu componi
+  solo parole, e lo spazio tra una parola e l'altra lo mette il programma quando
+  **confermi** (Spazio) e apre la parola dopo.
 
-- **Gli spazi si mettono da soli.** Non esiste un tasto «spazio-lettera»: tu
-  componi solo parole, e lo spazio tra una parola e l'altra lo mette il programma
-  quando **confermi** (spazio) e apri la parola dopo.
+- **Correggere una parola già scritta.** Con **Naviga ◀ / ▶** ti sposti sulla parola
+  prima o dopo e con **Apri/Edit** la **riapri**: torna modificabile e il **Roll** ti
+  ripropone di nuovo le alternative (il programma ricorda quali tasti avevi premuto).
+  Scrivendo nelle app esterne conviene procedere da destra verso sinistra.
 
-- **La maiuscola arriva da sola.** A inizio frase la prima parola compare con
-  l'iniziale **maiuscola**. Le varianti maiuscolo/minuscolo (e gli accenti)
-  compaiono tra le alternative del **Roll**, dopo le parole vere.
-
-- **Correggere una parola già scritta.** Con **← / →** ti sposti sulla parola
-  prima o dopo e la **riapri**: torna modificabile e il **Roll** ti ripropone di
-  nuovo le alternative (il programma ricorda quali tasti avevi premuto). Nella
-  demo interna funziona su qualsiasi parola; scrivendo nelle app esterne
-  (Windows) conviene procedere da destra verso sinistra.
-
-> Con OneHand acceso, le **cifre** e i **tasti funzione** servono a comporre le
-> parole. Per usarli in modo normale, premi **⏹ Stop**.
+> Con l'assistente acceso, i tasti mappati servono a comporre e comandare. Per usarli
+> in modo normale, premi **Play/Pause** per mettere in pausa.
 >
 > Le scorciatoie con **Ctrl / Alt / Win** non vengono toccate: funzionano sempre.
 
@@ -263,111 +165,120 @@ Tre cose che rendono tutto più naturale:
 
 # Parte 3 · Casi d'uso ed esempi
 
-Con il **tastierino numerico** (2=abc 3=def 4=ghi 5=jkl 6=mno 7=pqrs 8=tuv
-9=wxyz) scrivi qualsiasi parola premendo una cifra per lettera:
+Ragionando col modello del **cellulare** (2=abc 3=def 4=ghi 5=jkl 6=mno 7=pqrs
+8=tuv 9=wxyz), scrivi qualsiasi parola premendo una «cifra» per lettera. Sulla
+tastiera dell'assistente quelle cifre **2–9 sono i tasti** `w e a s d z x c`
+(`2`=`w`, `3`=`e`, `4`=`a`, `5`=`s`, `6`=`d`, `7`=`z`, `8`=`x`, `9`=`c`).
 
-| Vuoi scrivere | Premi i tasti | Nota |
-|---------------|---------------|------|
-| **cosa** | `2 6 7 2` → spazio | c-o-s-a |
-| **cane** | `2 2 6 3` → spazio | con **Roll** scegli tra cane / band… |
-| **donna** | `3 6 6 6 2` → spazio | d-o-n-n-a |
-| **giorno** | `4 4 6 7 6 6` → spazio | g-i-o-r-n-o |
+| Vuoi scrivere | «Cifre» del cellulare | Tasti da premere | Nota |
+|---------------|-----------------------|------------------|------|
+| **cosa**   | `2 6 7 2`     | `w d z w`     | c-o-s-a |
+| **cane**   | `2 2 6 3`     | `w w d e`     | con **Roll** scegli tra cane / band… |
+| **donna**  | `3 6 6 6 2`   | `e d d d w`   | d-o-n-n-a |
+| **giorno** | `4 4 6 7 6 6` | `a a d z d d` | g-i-o-r-n-o |
 
-Il principio è sempre lo stesso: **una cifra per ogni lettera**, **Roll** se la
-parola mostrata non è quella giusta, **spazio** per confermare e andare avanti.
+Poi **Spazio** per confermare e andare avanti, **Roll** (`F`) se la parola mostrata
+non è quella giusta.
+
+> ⚠️ La fila dei numeri in alto **1–5** non compone lettere: nell'assistente fa
+> punteggiatura e *Write* (vedi la tabella in Parte 2). Le lettere si compongono
+> **solo** con `w e a s d z x c`.
 
 ---
 
 # Personalizzazione (facoltativa)
 
-Le impostazioni stanno nel file **`config.json`**, accanto al programma. Lo apri
-con un editor di testo, lo modifichi, **salvi e riavvii** OneHand. Questi sono i
-valori di partenza:
+### Rimappare i tasti alle funzioni
 
-```json
-{
-  "wordlist": "wordlist_it.txt",
-  "max_candidates": 8,
-  "keymap": {
-    "letters": {
-      "2": "abc", "3": "def", "4": "ghi", "5": "jkl",
-      "6": "mno", "7": "pqrs", "8": "tuv", "9": "wxyz"
-    }
-  }
-}
+L'assistente Windows legge all'avvio il file **`data/tasti.conf`** (accanto
+all'eseguibile) e associa ogni **funzione** a uno o più **tasti**. Lo apri con un
+editor di testo, lo modifichi, **salvi e riavvii**. Se il file manca, valgono i
+default di fabbrica (identici a quelli scritti nel file distribuito).
+
+Una riga per funzione, `funzione = tasto [altro_tasto ...]`, con `#` per i
+commenti. Estratto:
+
+```
+conferma_continua = Spazio
+cancella_lettera  = Backspace BlocMaiusc
+scarta            = Esc
+punto             = 1
+roll        = F
+conferma    = G
+avanti      = R
+apri        = T
+naviga_prev = V
+naviga_next = B
 ```
 
-| Voce | A cosa serve |
-|------|--------------|
-| `wordlist` | Il dizionario da usare (un file di parole nella stessa cartella). |
-| `max_candidates` | Quante alternative mostrare con il Roll. |
-| `keymap.letters` | La mappa **tasto → gruppo di lettere**. Il preset è il T9 classico; puoi cambiarlo (es. layout su meno tasti). Un tasto non mappato vale se stesso. |
+Funzioni disponibili: `conferma_continua`, `cancella_parola`, `cancella_lettera`,
+`scarta`, `punto`, `virgola`, `domanda`, `esclamativo`, `write`, `read`, `roll`,
+`conferma`, `avanti`, `apri`, `naviga_prev`, `naviga_next`. Tasti ammessi: una
+lettera `A..Z`, una cifra `0..9`, o un nome speciale (`Spazio`, `Tab`,
+`Backspace`, `BlocMaiusc`, `Esc`, `Backtick`). Le funzioni su tasti-**lettera**
+sono attive solo in modalità **Assistita** e **Multi-tap** (in Classica quelle
+lettere si digitano). I tasti-gruppo T9 `w e a s d z x c` sono riservati alla
+digitazione delle lettere e **non** vanno riassegnati.
 
-> Regole del file: virgolette `"..."` per il testo, numeri senza virgolette,
-> una virgola tra una voce e l'altra ma **non** dopo l'ultima.
-
-### Rimappare i tasti funzione
-
-I tasti delle **funzioni** (Roll, Conferma, Conferma+spazio, Canc. lettera, Canc.
-parola, Apri prec./succ.) si riassegnano direttamente dal **pannello** del
-programma: clicca **«Assegna»**, premi il tasto che vuoi, poi **Salva**. La scelta
-viene scritta in `config.json` (chiavi `roll_key`, `confirm_space_key`,
-`confirm_key`, `delete_char_key`, `delete_word_key`, `open_prev_key`,
-`open_next_key`) con nomi leggibili (`Tab`, `Space`, `Backspace`, `Delete`,
-`Left`, `Right`, `RShift`, oppure una lettera/cifra).
+> Il dizionario e il numero di alternative mostrate (8) sono fissati nel programma
+> (`app/windows/main.cpp`). Il file `data/config.json` **non** viene letto
+> dall'assistente: è solo un esempio del formato per la [C ABI](#per-chi-sviluppa).
 
 ### Usare un altro dizionario
 
-Il file indicato in `wordlist` deve avere **una parola per riga**. Puoi mettere
+L'assistente carica il file **`data/wordlist_it.txt`**: per cambiare dizionario ne
+sostituisci il contenuto (stesso nome file). Deve avere **una parola per riga**:
 solo la parola, oppure `parola`<kbd>TAB</kbd>`frequenza`: le parole più frequenti
 vengono proposte per prime (e messe per prime dal Roll quando più parole
 condividono la stessa sequenza di tasti). Righe vuote e righe che iniziano con `#`
-sono ignorate. Quello incluso (`wordlist_it.txt`) ha ~49.000 parole italiane.
+sono ignorate. Quello incluso ha ~49.000 parole italiane.
 
 ---
 
 # Per chi sviluppa
 
-Dettagli tecnici, utili solo a chi mette le mani nel codice.
+Dettagli tecnici, utili solo a chi mette le mani nel codice. Vedi anche
+`docs/ARCHITETTURA.md` (i tre livelli CORE/MOTORE/FE) e `docs/CORE-nuova-concezione.md`.
 
 ## Il modello (T9 word-centric)
 
 Tutto ruota attorno alla singola **Parola**. Ogni pressione è un **tasto** del
 keymap, cioè un **gruppo di lettere**; il dizionario cerca le parole della stessa
 lunghezza le cui lettere stanno, posizione per posizione, nei gruppi premuti, e le
-ordina per frequenza. Il **Roll** cicla le collisioni. Gli **spazi non esistono
-come dato**: il documento è una lista di parole e lo spazio tra loro è calcolato al
-momento di disegnare il testo. Il motore possiede il testo canonico ed emette solo
-il **diff minimo** (cancella dalla coda + reinserisci) verso il campo con focus.
+ordina per frequenza (col contesto, via modello a bigrammi). Il **Roll** cicla le
+collisioni. Gli **spazi non esistono come dato**: il documento è una lista di parole
+e lo spazio tra loro è calcolato al momento di disegnare il testo.
 
 ## Com'è fatto il progetto
 
-Il codice è diviso in **motore** (logica pura, portabile) e **frontend** (la
-parte legata al sistema operativo). Così il cuore si scrive una volta sola e ogni
-sistema aggiunge solo il suo strato sottile.
+Il codice è diviso in tre livelli: **CORE** (logica pura di matching/predizione,
+stateless), **MOTORE** (macchina a stati sopra il CORE, condivisa fra i frontend) e
+**FE** (lo strato sottile legato al sistema operativo). Così il cuore si scrive una
+volta sola e ogni sistema aggiunge solo il suo adattatore.
 
 | Cartella / file | A cosa serve |
 |-----------------|--------------|
-| `core/` | **Il motore**: keymap, dizionario T9 (`computeCandidates` su gruppi di lettere), composizione a Parola, render con spazi derivati, alterazioni (maiuscole/accenti). Nessuna dipendenza dal sistema operativo; testabile da solo (`core/tests/`). |
-| `core/include/onehand/predictor.hpp` | Interfaccia **`Predictor`** per il ranking dei candidati e la parola successiva. Default: ordine per frequenza. Pensata per agganciare più avanti un ranking neurale (n-gram / ONNX) senza toccare il motore. |
-| `platform/windows/main_win32.cpp` | **Frontend Windows**: cattura tasti, scrittura del testo, finestrella Play/Stop, popup, rimappatura dei tasti funzione. |
-| `platform/macos/main.swift` | **Demo macOS** (Swift + AppKit). Usa il motore tramite la C ABI. |
-| `data/wordlist_it.txt` | Dizionario italiano (parola`TAB`frequenza, da OpenSubtitles 2018). |
-| `data/config.json` | Le impostazioni (keymap, dizionario). |
+| `core/src/sohw/` | **CORE** «nuova concezione»: facade stateless (`core.cpp`), provider dei candidati T9/Literal, modello a bigrammi e predittore. Nessuna dipendenza dal sistema operativo. |
+| `core/src/motore/` | **MOTORE**: macchina a stati (`engine.cpp`) — documento a parole, cursori selezione/aperta, render con spazi derivati, azioni (Roll/Conferma/Naviga/Punteggiatura/Read/Write) e disponibilità azioni. |
+| `core/` (resto) | Libreria di base `onehand_core`: keymap, dizionario T9 (`computeCandidates`), utf8, alterazioni. Testabile da sola (`core/tests/`, suite CTest). |
+| `core/include/onehand/predictor.hpp` | Interfaccia **`Predictor`** per il ranking dei candidati e la parola successiva. Pensata per agganciare più avanti un ranking neurale (n-gram / ONNX) senza toccare il CORE. |
+| `app/windows/main.cpp` | **FE Windows** (`sohw_assistant`): hook tastiera globale, pannello, overlay, Read/Write via appunti. Chiama `motore::Engine` direttamente. |
+| `data/wordlist_it.txt` | Dizionario italiano (parola`TAB`frequenza, da OpenSubtitles 2018). Caricato per nome dall'assistente. |
+| `data/it.bigrams.bin` | Modello a bigrammi per il ranking contestuale e la parola successiva (generato offline; non versionato). Se assente → ranking a sola frequenza. |
+| `data/tasti.conf` | Mappatura **tasto → funzione** letta dall'assistente Windows (vedi [Personalizzazione](#personalizzazione-facoltativa)). Opzionale: se assente valgono i default cablati. |
+| `data/config.json` | **Esempio** del formato JSON per la **C ABI** (`wordlist`, `max_candidates`, `keymap.letters`). Non è letto dall'assistente Windows: lo interpreta `parseConfig` solo quando un host esterno gli passa quel testo. |
 
-> C'è una **C ABI** opzionale (`core/include/onehand/onehand_c.h`) per chiamare il
-> motore da altri linguaggi (Swift, C#, Rust…). La usa la demo macOS: le azioni
-> risolte dal frontend con `onehand_on_action` / `onehand_on_action_index` (per
-> l'accesso casuale `OPEN_WORD_AT`), l'introspezione del documento
-> (`onehand_word_count` / `onehand_open_index` / `onehand_caret` /
-> `onehand_render_text`) e `onehand_apply_config_json` per leggere `config.json`
-> con lo stesso parser tollerante. Il frontend Windows chiama `onehand::Engine`
-> direttamente e non ne ha bisogno.
+> C'è una **C ABI** opzionale, non necessaria al FE Windows (che chiama il C++
+> direttamente), per pilotare il motore da altri linguaggi (C#, Rust, Swift…):
+> `core/include/sohw/smartcore_c.h` (CORE «nuova concezione») e la più vecchia
+> `core/include/onehand/onehand_c.h`. Entrambe ricevono la config come **testo JSON**
+> (parser tollerante `parseConfig`); non aprono file da sole.
 
 ### In arrivo (rinviato)
 
-Punteggiatura e apostrofi, ranking **neurale** (l'interfaccia `Predictor` è già
-pronta) e accesso casuale anche nelle app esterne. Vedi il piano di progetto.
+Maiuscole automatiche a inizio frase, ranking **neurale** (l'interfaccia `Predictor`
+è già pronta) e overlay/lettura ancorati al cursore reale via UIA. Backlog completo
+in `docs/ARCHITETTURA.md` §6.
 
 ## Windows: opzioni aggiuntive
 
@@ -386,29 +297,9 @@ cmake --build build --config Release
 ctest --test-dir build\core --output-on-failure -C Release
 ```
 
-**Costruire anche la C ABI** (`onehand_c.dll`):
+**Costruire anche le C ABI** (librerie condivise, opzionali):
 
 ```bat
-cmake -B build -DONEHAND_BUILD_C_ABI=ON
+cmake -B build -DONEHAND_BUILD_C_ABI=ON -DSOHW_BUILD_C_ABI=ON
 cmake --build build --config Release
-```
-
-## Windows: compilare a mano con `cl` (senza CMake)
-
-Dalla **«x64 Native Tools Command Prompt for VS»**, nella cartella del progetto:
-
-```bat
-cl /EHsc /std:c++17 /utf-8 /DUNICODE /D_UNICODE /I core\include /I core\src ^
-   platform\windows\main_win32.cpp ^
-   core\src\engine.cpp core\src\dictionary.cpp core\src\config.cpp ^
-   core\src\utf8.cpp core\src\alterations.cpp core\src\predictor_frequency.cpp ^
-   /link /SUBSYSTEM:WINDOWS user32.lib gdi32.lib /OUT:onehand.exe
-```
-
-In questo caso i due file dati vanno copiati a mano accanto all'eseguibile
-(CMake lo fa da solo, `cl` no):
-
-```bat
-copy data\config.json .
-copy data\wordlist_it.txt .
 ```

@@ -297,6 +297,35 @@ void Engine::acceptSuggestion(int k) {
     advance();   // apre una nuova parola vuota a destra, pronta per il prossimo next-word
 }
 
+// ------------------------------------------------------------------ disponibilità azioni
+Availability Engine::availability(const std::vector<std::string>& sugg,
+                                  bool suggAreNext) const {
+    Availability a;
+    const int n = static_cast<int>(words_.size());
+    // Slot aperto vuoto: navigarci "indietro" lo scarta e sposta la selezione a sinistra.
+    const bool emptyOpen = (open_ >= 0 &&
+                            words_[open_].cells.empty() && words_[open_].text.empty());
+
+    a.navNext      = (sel_ >= 0) && (sel_ < n - 1);
+    a.navPrev      = (n > 0) && (sel_ > 0 || emptyOpen);
+    a.open         = (sel_ >= 0) && (open_ != sel_);
+    // Roll: se la riga è next-word cicla l'evidenziatore (serve ≥2 voci); altrimenti
+    // cicla i candidati della parola aperta (serve ≥2 candidati).
+    a.roll         = suggAreNext ? (static_cast<int>(sugg.size()) >= 2)
+                                 : (open_ >= 0 && words_[open_].cands.size() >= 2);
+    // Conferma: chiude la parola aperta (anche uno slot vuoto -> lo scarta) oppure
+    // accetta il next-word evidenziato.
+    a.confirm      = (open_ >= 0) || (suggAreNext && nextSel_ >= 0);
+    a.advance      = true;                 // "nuova parola" (anche Conf. continua): sempre
+    a.deleteLetter = (open_ >= 0);
+    a.deleteWord   = (sel_ >= 0);
+    a.punct        = true;
+    a.read         = true;
+    a.write        = (n > 0);
+    a.discard      = (n > 0);
+    return a;
+}
+
 // ------------------------------------------------------------------ integrazione CORE
 void Engine::recomputeOpen() {
     if (open_ < 0) return;
@@ -371,6 +400,10 @@ RenderModel Engine::render() const {
         r.suggestionSel = (wd.idx < lim) ? wd.idx : (lim > 0 ? 0 : -1);
         r.suggestionsAreNext = false;
     }
+
+    // Disponibilità dei comandi nello stato corrente (riusa i suggerimenti appena
+    // calcolati per il caso Roll/next-word).
+    r.actions = availability(r.suggestions, r.suggestionsAreNext);
     return r;
 }
 

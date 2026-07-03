@@ -76,6 +76,10 @@ private:
     void removeWordAt(int index);         // rimuove una parola aggiustando sel_/open_
     bool nextWordActive() const;          // true = riga suggerimenti in modo next-word
     std::vector<std::string> computeNextWords(int n) const;  // predizioni dal contesto
+    // Calcola quali azioni sono valide nello stato corrente (riusa i suggerimenti
+    // già prodotti dal render per il caso Roll/next-word, evitando di ricalcolarli).
+    Availability availability(const std::vector<std::string>& suggestions,
+                              bool suggestionsAreNext) const;
 
     sohw::Core        core_;
     bool              assisted_ = true;

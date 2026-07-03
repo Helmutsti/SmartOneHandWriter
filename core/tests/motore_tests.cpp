@@ -251,6 +251,46 @@ int main() {
     }
     std::puts("motore_tests: OK (M5 suggerimenti)");
 
+    // ================= disponibilità azioni (attivazione bottoni) =========
+
+    // --- documento vuoto: quasi tutto disabilitato -------------------------
+    {
+        Engine e;
+        Availability a = e.render().actions;
+        assert(!a.navPrev && !a.navNext && !a.open && !a.roll && !a.confirm);
+        assert(!a.deleteLetter && !a.deleteWord && !a.write && !a.discard);
+        assert(a.advance && a.punct && a.read);   // "nuova parola" / punteggiatura / read: sempre
+    }
+
+    // --- parola aperta in digitazione (T9 senza dizionario) ----------------
+    {
+        Engine e; e.setMode(true);
+        e.typeKey("5"); e.typeKey("2");            // apre e digita "52" (nessun candidato)
+        Availability a = e.render().actions;
+        assert(a.confirm && a.deleteLetter && a.write && a.discard);
+        assert(!a.roll);                            // 0/1 candidato -> niente da ciclare
+        assert(!a.open);                            // la selezione è già la parola aperta
+        assert(!a.navPrev && !a.navNext);           // un'unica parola
+    }
+
+    // --- documento risolto: navigazione e comandi selezione ----------------
+    {
+        Engine e; e.loadResolved("uno due tre");   // sel=2 (ultima), nessuna aperta
+        {
+            Availability a = e.render().actions;
+            assert(a.navPrev && !a.navNext);        // in fondo: si va solo indietro
+            assert(a.open && a.deleteWord);
+            assert(!a.deleteLetter && !a.confirm);  // nessuna parola aperta
+            assert(a.write && a.discard);
+        }
+        e.select(0);                                // prima parola
+        {
+            Availability a = e.render().actions;
+            assert(!a.navPrev && a.navNext);        // in testa: si va solo avanti
+        }
+    }
+    std::puts("motore_tests: OK (disponibilità azioni)");
+
     // --- integrazione col CORE reale (se i dati sono presenti) -------------
 #ifdef SOHW_DATA_DIR
     {
