@@ -1,0 +1,7 @@
+// Espone la C ABI del MOTORE (core/include/motore/motore_c.h) a Swift come
+// modulo `CMotore`. Il percorso dell'header e' passato a swiftc con
+// -Xcc -I<repo>/core/include (vedi build_macos.sh).
+module CMotore {
+    header "shim.h"
+    export *
+}

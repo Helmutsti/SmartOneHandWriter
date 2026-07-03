@@ -75,6 +75,10 @@ diff con le API native — contratto indipendente dalla piattaforma. (Vedi `Effe
 Orientamento iniziale suggerito: **(A)** buffer canonico, con un **editor interno** come contesto
 primario e iniezione best-effort verso app esterne; ambito e piattaforme da confermare.
 
+**Risolto (stato attuale)**: ambito **system-wide** su entrambe le piattaforme (hook globale +
+iniezione via clipboard/Cmd+V/Ctrl+V), modello di contesto **(A)** buffer canonico. Piattaforme target:
+**Windows** (`app/windows`) e **macOS** (`app/macos`).
+
 ## 5. Stato — versione avviabile ✅
 
 I tre livelli sono implementati e la prima **versione avviabile** dell'assistente Windows esiste.
@@ -106,9 +110,19 @@ I tre livelli sono implementati e la prima **versione avviabile** dell'assistent
   con ≥2 candidati/next-word, Naviga ▶ solo se non sei all'ultima parola, Canc. lettera solo con
   parola aperta). Logica condivisa nel MOTORE, non nel FE. Coperto da `motore_tests`.
 
-**Cablatura scelta**: il FE C++ chiama `motore_core` **direttamente** (niente C ABI dedicata del MOTORE);
+**Cablatura scelta (Windows)**: il FE C++ chiama `motore_core` **direttamente** (niente marshalling);
 la C ABI del CORE (`smartcore_c`) resta per i linguaggi terzi. Build: `cmake -B build && cmake --build
-build --config Release` → `build/app/windows/Release/sohw_assistant.exe`; suite test 7/7 verde.
+build --config Release` → `build/app/windows/Release/sohw_assistant.exe`.
+
+- **FE macOS** (`app/macos/`, Swift + AppKit): stesso adattatore di solo I/O, ma verso `motore_core`
+  attraverso la **C ABI del MOTORE** `motore_c` (`core/include/motore/motore_c.h`, target statico
+  `motore_c`), dato che Swift non può linkare il C++ direttamente. Assistente di sistema completo:
+  hook globale via `CGEventTap` (equiv. `WH_KEYBOARD_LL`, richiede il permesso **Accessibilità**),
+  incolla in app terze via Cmd+V sintetico marcato come iniettato, overlay `NSPanel .nonactivatingPanel`
+  (non ruba il focus), pannello `NSButton` con abilitazione da `Availability`, tre modalità e binding da
+  `data/tasti.conf` (nomi di tasto tradotti nei keycode macOS). Mappa 1:1 di `app/windows/main.cpp`; vedi
+  `app/macos/README.md`. Build con `app/macos/build_macos.sh` (fuori Mac App Store: l'event tap che
+  assorbe tasti è incompatibile con la sandbox). La C ABI è coperta da `motore_c_tests`.
 
 ## 6. Backlog / evoluzioni future
 
@@ -125,7 +139,7 @@ Consolidato dai piani (ora completati e rimossi; storia in git). Per priorità:
   del near-mouse e della clipboard (E13/D10).
 - **Iniezione incrementale** in-app via `Effects`/diff (oggi `Write` incolla il buffer "a blocco").
 - **Maiuscole** (G20): auto a inizio frase (dopo `. ! ?`) + tasto "Maiuscola"; oggi tutto minuscolo.
-- **C ABI del MOTORE** (`motore_c.h`) per frontend non-C++ (macOS/altro), se e quando servirà.
+- ✅ **C ABI del MOTORE** (`motore_c.h`) per frontend non-C++: fatta; usata dal FE macOS (Swift).
 - Persistenza della config del FE (modalità, keymap).
 
 **CORE** (dettagli in `CORE-nuova-concezione.md` §21.4)
