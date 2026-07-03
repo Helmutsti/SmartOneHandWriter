@@ -36,6 +36,15 @@ add_library(motore_core STATIC
 target_include_directories(motore_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(motore_core PUBLIC sohw_core)
 
+# --- C ABI del MOTORE (motore_c): thin FFI per il frontend macOS (Swift) ------
+# Stateful (possiede il documento), a differenza di smartcore_c. Statica: la app
+# macOS la linka insieme a motore_core. Include pubblici: include/ + src/ (utf8).
+add_library(motore_c STATIC src/motore/motore_c.cpp)
+target_include_directories(motore_c
+    PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/include
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(motore_c PUBLIC motore_core)
+
 # --- C ABI opzionale: per frontend in altri linguaggi (Swift/C#/Rust) --------
 # Non serve al frontend C++. Attivala con -DONEHAND_BUILD_C_ABI=ON.
 option(ONEHAND_BUILD_C_ABI "Build the optional C ABI shared library (onehand_c)" OFF)
@@ -82,6 +91,11 @@ if(ONEHAND_BUILD_TESTS)
     target_link_libraries(motore_tests PRIVATE motore_core)
     target_compile_definitions(motore_tests PRIVATE SOHW_DATA_DIR="${CMAKE_SOURCE_DIR}/data")
     add_test(NAME motore_tests COMMAND motore_tests)
+
+    # Smoke test del C ABI del MOTORE (usa SOLO l'header C, linka motore_c).
+    add_executable(motore_c_tests tests/motore_c_tests.cpp)
+    target_link_libraries(motore_c_tests PRIVATE motore_c)
+    add_test(NAME motore_c_tests COMMAND motore_c_tests)
 
     add_executable(bigram_tests tests/bigram_tests.cpp)
     target_link_libraries(bigram_tests PRIVATE sohw_core)

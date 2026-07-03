@@ -33,7 +33,12 @@ mano scrivi qualsiasi parola.
 # Parte 1 · Installazione
 
 Il programma non è già pronto: va **creato una volta** dal computer (si chiama
-«compilare»). Serve **Windows**.
+«compilare»). Funziona su **Windows** e su **macOS**.
+
+- **Hai Windows** → segui qui sotto.
+- **Hai un Mac** → salta a **[Installazione su macOS](#installazione-su-macos)**.
+
+## Su Windows
 
 ### Cosa serve (una volta sola)
 
@@ -79,13 +84,52 @@ di comandi e (quando scrivi) un **riquadro** in sovraimpressione col testo. All'
 > 📦 **Distribuire il programma su un altro PC** (senza compilatore): vedi la ricetta
 > del pacchetto self-contained in `docs/ARCHITETTURA.md` §7.
 
+## Installazione su macOS
+
+Su Mac l'assistente è un'app **`SmartOneHandWriter.app`** (Swift/AppKit) con le stesse
+funzioni della versione Windows. Il cuore del programma è lo **stesso** codice
+condiviso; cambia solo l'adattatore al sistema.
+
+### Cosa serve (una volta sola)
+
+| Cosa | Come ottenerlo |
+|------|----------------|
+| **Xcode Command Line Tools** | Nel Terminale: `xcode-select --install` (fornisce `swiftc` e `cmake`; se manca `cmake`, installalo con [Homebrew](https://brew.sh): `brew install cmake`). |
+
+### I passi
+
+1. **Scarica il progetto** (come su Windows: `git clone …` oppure lo ZIP) e apri il
+   Terminale nella cartella del progetto.
+
+2. **Crea l'app** con un comando:
+
+   ```sh
+   app/macos/build_macos.sh
+   ```
+
+   Trovi l'app in **`build/SmartOneHandWriter.app`**. Avviala con
+   `open build/SmartOneHandWriter.app` (o doppio clic nel Finder).
+
+3. **Concedi il permesso Accessibilità.** Per poter «leggere» i tasti in tutte le
+   app, macOS chiede un permesso: la prima volta compare una richiesta. Vai in
+   **Impostazioni di Sistema › Privacy e sicurezza › Accessibilità**, abilita
+   **SmartOneHandWriter** nell'elenco, poi torna all'app e premi **Play**.
+
+> 🔒 Il permesso Accessibilità è normale per questo tipo di programmi (che
+> intercettano la tastiera). Puoi revocarlo quando vuoi dallo stesso pannello.
+>
+> 📦 Per distribuire l'app ad altri serve **firmarla e notarizzarla** (fuori dal Mac
+> App Store); dettagli in `app/macos/README.md`.
+
 ---
 
 # Parte 2 · Come si usa
 
-L'assistente Windows (`sohw_assistant.exe`) ti aiuta a scrivere **in qualsiasi
-applicazione**: intercetta i tasti, tiene un **buffer** di testo mostrato in un
-riquadro in sovraimpressione, e lo scrive nell'app attiva quando glielo chiedi.
+L'assistente (`sohw_assistant.exe` su Windows, `SmartOneHandWriter.app` su macOS) ti
+aiuta a scrivere **in qualsiasi applicazione**: intercetta i tasti, tiene un
+**buffer** di testo mostrato in un riquadro in sovraimpressione, e lo scrive nell'app
+attiva quando glielo chiedi. Pannello, riquadro, modalità e tasti sono **identici**
+sulle due piattaforme.
 
 ## Le due finestre
 
@@ -139,9 +183,10 @@ riassegnarle nel file `data/tasti.conf` (vedi [Personalizzazione](#personalizzaz
 | **5** | **Write** — scrive il buffer nell'app attiva e lo svuota |
 | **` (grave)** | **Read** — carica nel buffer il testo copiato negli appunti |
 
-> **Read/Write** passano dagli **appunti**: *Read* legge quello che hai copiato con
-> `Ctrl+C`; *Write* incolla il buffer nell'app attiva (con `Ctrl+V`) e poi ripristina
-> i tuoi appunti. Gli **spazi** e la **punteggiatura** tra le parole li mette il
+> **Read/Write** passano dagli **appunti**: *Read* legge quello che hai copiato
+> (`Ctrl+C`, su Mac `Cmd+C`); *Write* incolla il buffer nell'app attiva (`Ctrl+V`, su
+> Mac `Cmd+V`) e poi ripristina i tuoi appunti. Gli **spazi** e la **punteggiatura**
+> tra le parole li mette il
 > programma; in Classica i tasti-lettera occupano `R T F G V B`, quindi quelle
 > funzioni si usano dai **bottoni**.
 
@@ -262,17 +307,20 @@ volta sola e ogni sistema aggiunge solo il suo adattatore.
 | `core/src/motore/` | **MOTORE**: macchina a stati (`engine.cpp`) — documento a parole, cursori selezione/aperta, render con spazi derivati, azioni (Roll/Conferma/Naviga/Punteggiatura/Read/Write) e disponibilità azioni. |
 | `core/` (resto) | Libreria di base `onehand_core`: keymap, dizionario T9 (`computeCandidates`), utf8, alterazioni. Testabile da sola (`core/tests/`, suite CTest). |
 | `core/include/onehand/predictor.hpp` | Interfaccia **`Predictor`** per il ranking dei candidati e la parola successiva. Pensata per agganciare più avanti un ranking neurale (n-gram / ONNX) senza toccare il CORE. |
-| `app/windows/main.cpp` | **FE Windows** (`sohw_assistant`): hook tastiera globale, pannello, overlay, Read/Write via appunti. Chiama `motore::Engine` direttamente. |
+| `app/windows/main.cpp` | **FE Windows** (`sohw_assistant`): hook tastiera globale, pannello, overlay, Read/Write via appunti. Chiama `motore::Engine` direttamente (C++). |
+| `app/macos/` | **FE macOS** (Swift/AppKit): stesso adattatore, ma via la **C ABI** `motore_c` (Swift non linka il C++). `CGEventTap` (permesso Accessibilità), overlay `NSPanel`, pannello `NSButton`, Read/Write via appunti. Build: `app/macos/build_macos.sh`. Vedi `app/macos/README.md`. |
+| `core/include/motore/motore_c.h` | **C ABI del MOTORE** (`motore_c`): wrapper C sottile su `motore::Engine` (stateful), usato dal FE macOS. Testata da `core/tests/motore_c_tests.cpp`. |
 | `data/wordlist_it.txt` | Dizionario italiano (parola`TAB`frequenza, da OpenSubtitles 2018). Caricato per nome dall'assistente. |
 | `data/it.bigrams.bin` | Modello a bigrammi per il ranking contestuale e la parola successiva (generato offline; non versionato). Se assente → ranking a sola frequenza. |
 | `data/tasti.conf` | Mappatura **tasto → funzione** letta dall'assistente Windows (vedi [Personalizzazione](#personalizzazione-facoltativa)). Opzionale: se assente valgono i default cablati. |
 | `data/config.json` | **Esempio** del formato JSON per la **C ABI** (`wordlist`, `max_candidates`, `keymap.letters`). Non è letto dall'assistente Windows: lo interpreta `parseConfig` solo quando un host esterno gli passa quel testo. |
 
-> C'è una **C ABI** opzionale, non necessaria al FE Windows (che chiama il C++
-> direttamente), per pilotare il motore da altri linguaggi (C#, Rust, Swift…):
-> `core/include/sohw/smartcore_c.h` (CORE «nuova concezione») e la più vecchia
-> `core/include/onehand/onehand_c.h`. Entrambe ricevono la config come **testo JSON**
-> (parser tollerante `parseConfig`); non aprono file da sole.
+> Ci sono più **C ABI** per pilotare il motore da altri linguaggi. Il FE Windows non
+> ne usa (chiama il C++ direttamente); il **FE macOS** usa `motore_c` (la C ABI del
+> **MOTORE** stateful, `core/include/motore/motore_c.h`). Per lo strato **CORE**
+> stateless c'è `core/include/sohw/smartcore_c.h` e la più vecchia
+> `core/include/onehand/onehand_c.h` (ricevono la config come **testo JSON** via
+> `parseConfig`; non aprono file da sole).
 
 ### In arrivo (rinviato)
 
@@ -303,3 +351,21 @@ ctest --test-dir build\core --output-on-failure -C Release
 cmake -B build -DONEHAND_BUILD_C_ABI=ON -DSOHW_BUILD_C_ABI=ON
 cmake --build build --config Release
 ```
+
+## macOS: opzioni aggiuntive
+
+**Firmare l'app** con un'identità stabile (consigliato: l'Accessibilità è legata alla
+firma, e la firma ad-hoc cambia a ogni rebuild):
+
+```sh
+CODESIGN_ID="Developer ID Application: Nome (TEAMID)" app/macos/build_macos.sh
+```
+
+**Eseguire il test della C ABI del motore** (usata dal FE macOS, ma portabile — gira
+anche su Linux/CI):
+
+```sh
+ctest --test-dir build/core --output-on-failure -R motore_c
+```
+
+Dettagli su struttura, permessi e notarizzazione: **`app/macos/README.md`**.

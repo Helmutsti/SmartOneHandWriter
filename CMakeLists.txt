@@ -15,7 +15,13 @@ endif()
 # Contiene CORE (sohw) + MOTORE (motore) + libreria di base (onehand_core).
 add_subdirectory(core)
 
-# Il frontend nativo: l'assistente di digitazione (FE sopra il MOTORE). Solo Windows.
+# Il frontend nativo: l'assistente di digitazione (FE sopra il MOTORE).
 if(WIN32)
+    # Windows: Win32/GDI, linkato direttamente a motore_core (C++).
     add_subdirectory(app/windows)
+elseif(APPLE)
+    # macOS: frontend Swift/AppKit. Non si compila da CMake (serve swiftc): lo
+    # costruisce app/macos/build_macos.sh, che linka il target motore_c (la C ABI
+    # del MOTORE, sempre inclusa in core/) e assembla il bundle .app.
+    message(STATUS "macOS: costruisci il frontend con app/macos/build_macos.sh (usa il target motore_c)")
 endif()
